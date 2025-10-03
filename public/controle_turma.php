@@ -44,6 +44,12 @@ while($e = $emprestimos_q->fetch_assoc()) {
     ];
 }
 
+// Busca todas as outras turmas para o remanejamento
+$outras_turmas_q = $conn->prepare("SELECT t.id, CONCAT(s.nome, ' - ', t.nome) as nome_completo FROM turmas t JOIN series s ON t.serie_id = s.id WHERE t.id != ? ORDER BY nome_completo");
+$outras_turmas_q->bind_param("i", $turma_id);
+$outras_turmas_q->execute();
+$outras_turmas = $outras_turmas_q->get_result();
+
 $conn->close();
 ?>
 <!DOCTYPE html>
@@ -68,12 +74,18 @@ $conn->close();
     </nav>
 
     <div class="container-fluid mt-4">
-        <h3>Controle da Turma: <?php echo htmlspecialchars($turma['serie_nome'] . ' - ' . $turma['turma_nome']); ?></h3>
+        <div class="d-flex justify-content-between align-items-center">
+            <h3>Controle da Turma: <?php echo htmlspecialchars($turma['serie_nome'] . ' - ' . $turma['turma_nome']); ?></h3>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#adicionarAlunoModal">
+                <i class="bi bi-plus-circle"></i> Adicionar Novo Aluno
+            </button>
+        </div>
         
         <div class="table-responsive">
             <table class="table table-bordered table-striped table-hover">
                 <thead class="table-primary" style="position: sticky; top: 0; z-index: 1;">
                     <tr>
+                        <th style="width: 50px;"></th>
                         <th style="width: 250px;">Aluno</th>
                         <th style="width: 180px;">Entregar Todos (BOM)</th>
                         <?php foreach ($livros_array as $livro): ?>
@@ -84,6 +96,11 @@ $conn->close();
                 <tbody>
                     <?php while($aluno = $alunos->fetch_assoc()): ?>
                         <tr>
+                            <td>
+                                <button class="btn btn-sm btn-outline-secondary btn-gerenciar-aluno" data-aluno-id="<?php echo $aluno['id']; ?>" title="Gerenciar Aluno">
+                                    <i class="bi bi-gear"></i>
+                                </button>
+                            </td>
                             <td class="text-start ps-2"><?php echo htmlspecialchars($aluno['nome']); ?></td>
                             <td>
                                 <button class="btn btn-sm btn-secondary btn-entregar-todos" data-aluno-id="<?php echo $aluno['id']; ?>" title="Entregar todos os livros para este aluno">
@@ -175,12 +192,79 @@ $conn->close();
         </div>
     </div>
 
+    <!-- Modal de Adicionar Aluno -->
+    <div class="modal fade" id="adicionarAlunoModal" tabindex="-1" aria-labelledby="adicionarAlunoModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="adicionarAlunoModalLabel">Adicionar Novo Aluno à Turma</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="form-adicionar-aluno">
+                        <div class="mb-3">
+                            <label for="novo_aluno_nome" class="form-label">Nome Completo do Aluno</label>
+                            <input type="text" class="form-control" id="novo_aluno_nome" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="novo_aluno_cgm" class="form-label">CGM (Código de Matrícula)</label>
+                            <input type="text" class="form-control" id="novo_aluno_cgm" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="btn-salvar-novo-aluno">Salvar Aluno</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Gerenciamento de Aluno -->
+    <div class="modal fade" id="gerenciarAlunoModal" tabindex="-1" aria-labelledby="gerenciarAlunoModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="gerenciarAlunoModalLabel">Gerenciar Aluno</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p><strong>Aluno:</strong> <span id="modal-gerenciar-aluno-nome"></span></p>
+                    <form id="form-gerenciar-aluno">
+                        <input type="hidden" id="modal-gerenciar-aluno-id">
+                        <div class="mb-3">
+                            <label for="remanejar_turma_id" class="form-label">Remanejar para outra Turma</label>
+                            <select class="form-select" id="remanejar_turma_id">
+                                <option value="">Selecione a nova turma...</option>
+                                <?php while($t = $outras_turmas->fetch_assoc()): ?>
+                                    <option value="<?php echo $t['id']; ?>"><?php echo htmlspecialchars($t['nome_completo']); ?></option>
+                                <?php endwhile; ?>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <button type="button" class="btn btn-danger" id="btn-remover-aluno">Remover da Turma</button>
+                    <div>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-primary" id="btn-salvar-remanejamento">Salvar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         const entregaModal = new bootstrap.Modal(document.getElementById('entregaModal'));
         const devolucaoModal = new bootstrap.Modal(document.getElementById('devolucaoModal'));
+        const gerenciarAlunoModal = new bootstrap.Modal(document.getElementById('gerenciarAlunoModal'));
+        const adicionarAlunoModal = new bootstrap.Modal(document.getElementById('adicionarAlunoModal'));
         let currentCell;
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const turmaId = urlParams.get('turma_id');
 
         document.querySelector('tbody').addEventListener('click', function(event) {
             const target = event.target.closest('button, a'); // Apenas botões ou links
@@ -199,6 +283,13 @@ $conn->close();
                 document.getElementById('modal-devolucao-livro-titulo').textContent = target.getAttribute('data-livro-titulo');
                 document.getElementById('modal-devolucao-conservacao-entrega').textContent = target.getAttribute('data-conservacao-entrega');
                 document.getElementById('modal-emprestimo-id').value = target.getAttribute('data-emprestimo-id');
+            } else if (target.classList.contains('btn-gerenciar-aluno')) {
+                const alunoId = target.getAttribute('data-aluno-id');
+                // Agora o nome do aluno está na segunda TD da TR
+                const alunoNome = target.closest('tr').querySelector('td:nth-child(2)').textContent;
+                document.getElementById('modal-gerenciar-aluno-nome').textContent = alunoNome;
+                document.getElementById('modal-gerenciar-aluno-id').value = alunoId;
+                gerenciarAlunoModal.show();
             }
         });
 
@@ -256,6 +347,70 @@ $conn->close();
                 fetch('api/registrar_entrega_massa.php', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
                 .then(res => res.json()).then(result => { if (result.success) { location.reload(); } else { alert('Erro: ' + result.message); } }).catch(err => alert('Erro de comunicação.'));
             });
+        });
+
+        document.getElementById('btn-salvar-remanejamento').addEventListener('click', function() {
+            const aluno_id = document.getElementById('modal-gerenciar-aluno-id').value;
+            const nova_turma_id = document.getElementById('remanejar_turma_id').value;
+
+            if (!nova_turma_id) {
+                alert('Por favor, selecione uma turma de destino.');
+                return;
+            }
+
+            if (!confirm('Tem certeza que deseja remanejar este aluno?')) return;
+
+            const data = { aluno_id: aluno_id, nova_turma_id: nova_turma_id };
+
+            fetch('api/remanejar_aluno.php', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
+            .then(res => res.json()).then(result => {
+                if (result.success) {
+                    gerenciarAlunoModal.hide();
+                    location.reload();
+                } else {
+                    alert('Erro: ' + result.message);
+                }
+            }).catch(err => alert('Erro de comunicação.'));
+        });
+
+        document.getElementById('btn-remover-aluno').addEventListener('click', function() {
+            const aluno_id = document.getElementById('modal-gerenciar-aluno-id').value;
+
+            if (!confirm('ATENÇÃO: Esta ação irá remover o aluno da turma. Ele não aparecerá mais nesta lista, mas os registros de empréstimos existentes serão mantidos. Deseja continuar?')) return;
+
+            const data = { aluno_id: aluno_id };
+
+            fetch('api/remover_aluno_turma.php', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
+            .then(res => res.json()).then(result => {
+                if (result.success) {
+                    gerenciarAlunoModal.hide();
+                    location.reload();
+                } else {
+                    alert('Erro: ' + result.message);
+                }
+            }).catch(err => alert('Erro de comunicação.'));
+        });
+
+        document.getElementById('btn-salvar-novo-aluno').addEventListener('click', function() {
+            const novoAlunoNome = document.getElementById('novo_aluno_nome').value;
+            const novoAlunoCgm = document.getElementById('novo_aluno_cgm').value;
+
+            if (!novoAlunoNome || !novoAlunoCgm) {
+                alert('Por favor, preencha todos os campos para adicionar o aluno.');
+                return;
+            }
+
+            const data = { nome: novoAlunoNome, cgm: novoAlunoCgm, turma_id: turmaId };
+
+            fetch('api/adicionar_aluno.php', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
+            .then(res => res.json()).then(result => {
+                if (result.success) {
+                    adicionarAlunoModal.hide();
+                    location.reload();
+                } else {
+                    alert('Erro: ' + result.message);
+                }
+            }).catch(err => alert('Erro de comunicação.'));
         });
     });
     </script>
