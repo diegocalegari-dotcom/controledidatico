@@ -41,6 +41,7 @@ $conn->close();
                     <li class="nav-item"><a class="nav-link" href="gerenciar_livros.php">Livros</a></li>
                     <li class="nav-item"><a class="nav-link" href="importar.php">Importar Alunos</a></li>
                     <li class="nav-item"><a class="nav-link" href="configuracoes.php">Configurações</a></li>
+                    <li class="nav-item"><a class="nav-link" href="relatorios.php">Relatórios</a></li>
                 </ul>
             </div>
         </div>

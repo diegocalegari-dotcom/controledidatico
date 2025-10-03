@@ -8,6 +8,8 @@ if ($turma_id <= 0) {
     exit;
 }
 
+$ano_atual = date('Y'); // Define o ano atual como o ano letivo para esta visualização
+
 // Busca dados da turma, série e curso
 $turma_info_q = $conn->prepare("SELECT t.nome as turma_nome, s.id as serie_id, s.nome as serie_nome, c.nome as curso_nome FROM turmas t JOIN series s ON t.serie_id = s.id JOIN cursos c ON s.curso_id = c.id WHERE t.id = ?");
 $turma_info_q->bind_param("i", $turma_id);
@@ -63,9 +65,11 @@ $conn->close();
         .table-responsive { max-height: 75vh; }
         .table td, .table th { text-align: center; vertical-align: middle; height: 55px; }
         .table th { width: 200px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .aluno-com-pendencia { color: red; font-weight: bold; }
+        .aluno-qualidade-ruim { color: orange; font-weight: bold; }
     </style>
 </head>
-<body>
+<body data-ano-atual="<?php echo $ano_atual; ?>">
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container-fluid">
             <a class="navbar-brand" href="index.php">Controle Didático</a>
@@ -230,18 +234,37 @@ $conn->close();
                 </div>
                 <div class="modal-body">
                     <p><strong>Aluno:</strong> <span id="modal-gerenciar-aluno-nome"></span></p>
-                    <form id="form-gerenciar-aluno">
-                        <input type="hidden" id="modal-gerenciar-aluno-id">
-                        <div class="mb-3">
-                            <label for="remanejar_turma_id" class="form-label">Remanejar para outra Turma</label>
-                            <select class="form-select" id="remanejar_turma_id">
-                                <option value="">Selecione a nova turma...</option>
-                                <?php while($t = $outras_turmas->fetch_assoc()): ?>
-                                    <option value="<?php echo $t['id']; ?>"><?php echo htmlspecialchars($t['nome_completo']); ?></option>
-                                <?php endwhile; ?>
-                            </select>
+                    <input type="hidden" id="modal-gerenciar-aluno-id">
+
+                    <ul class="nav nav-tabs" id="gerenciarAlunoTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="gerenciar-tab" data-bs-toggle="tab" data-bs-target="#gerenciar-pane" type="button" role="tab" aria-controls="gerenciar-pane" aria-selected="true">Gerenciar</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="historico-tab" data-bs-toggle="tab" data-bs-target="#historico-pane" type="button" role="tab" aria-controls="historico-pane" aria-selected="false">Histórico</button>
+                        </li>
+                    </ul>
+                    <div class="tab-content" id="gerenciarAlunoTabsContent">
+                        <div class="tab-pane fade show active" id="gerenciar-pane" role="tabpanel" aria-labelledby="gerenciar-tab" tabindex="0">
+                            <form id="form-gerenciar-aluno" class="mt-3">
+                                <div class="mb-3">
+                                    <label for="remanejar_turma_id" class="form-label">Remanejar para outra Turma</label>
+                                    <select class="form-select" id="remanejar_turma_id">
+                                        <option value="">Selecione a nova turma...</option>
+                                        <?php while($t = $outras_turmas->fetch_assoc()): ?>
+                                            <option value="<?php echo $t['id']; ?>"><?php echo htmlspecialchars($t['nome_completo']); ?></option>
+                                        <?php endwhile; ?>
+                                    </select>
+                                </div>
+                            </form>
                         </div>
-                    </form>
+                        <div class="tab-pane fade" id="historico-pane" role="tabpanel" aria-labelledby="historico-tab" tabindex="0">
+                            <div id="historico-aluno-content" class="mt-3">
+                                <!-- Conteúdo do histórico será carregado via JavaScript -->
+                                <p class="text-muted">Carregando histórico...</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer justify-content-between">
                     <button type="button" class="btn btn-danger" id="btn-remover-aluno">Remover da Turma</button>
@@ -411,6 +434,74 @@ $conn->close();
                     alert('Erro: ' + result.message);
                 }
             }).catch(err => alert('Erro de comunicação.'));
+        });
+
+        // Carregar pendências de anos anteriores para cada aluno
+        const anoAtual = document.body.dataset.anoAtual;
+        document.querySelectorAll('tbody tr').forEach(row => {
+            const alunoId = row.querySelector('.btn-gerenciar-aluno').getAttribute('data-aluno-id');
+            const alunoNomeSpan = row.querySelector('td:nth-child(2)'); // A segunda TD contém o nome do aluno
+
+            fetch(`api/get_pendencias_anteriores.php?aluno_id=${alunoId}&ano_atual=${anoAtual}`)
+                .then(res => res.json())
+                .then(result => {
+                    if (result.success) {
+                        if (result.tem_pendencias) {
+                            alunoNomeSpan.classList.add('aluno-com-pendencia');
+                            alunoNomeSpan.setAttribute('title', `Este aluno possui ${result.total_pendencias} pendência(s) de anos anteriores.`);
+                        } else if (result.tem_qualidade_ruim) {
+                            alunoNomeSpan.classList.add('aluno-qualidade-ruim');
+                            alunoNomeSpan.setAttribute('title', `Este aluno devolveu ${result.total_qualidade_ruim} livro(s) com qualidade ruim em anos anteriores.`);
+                        }
+                    }
+                })
+                .catch(err => console.error('Erro ao verificar pendências anteriores:', err));
+        });
+
+        // Event listener para a aba de Histórico
+        document.getElementById('historico-tab').addEventListener('shown.bs.tab', function (event) {
+            const alunoId = document.getElementById('modal-gerenciar-aluno-id').value;
+            const historicoContentDiv = document.getElementById('historico-aluno-content');
+            historicoContentDiv.innerHTML = '<p class="text-muted">Carregando histórico...</p>'; // Resetar e mostrar carregando
+
+            fetch(`api/get_historico_aluno.php?aluno_id=${alunoId}`)
+                .then(res => res.json())
+                .then(result => {
+                    if (result.success) {
+                        let html = '';
+                        if (Object.keys(result.historico).length === 0) {
+                            html = '<p>Nenhum histórico de empréstimos encontrado para este aluno.</p>';
+                        } else {
+                            for (const ano in result.historico) {
+                                html += `<h5 class="mt-3">Ano Letivo: ${ano}</h5>`;
+                                html += `<ul class="list-group">`;
+                                result.historico[ano].forEach(item => {
+                                    let statusClass = 'text-primary';
+                                    if (item.status === 'Devolvido') statusClass = 'text-success';
+                                    if (item.status === 'Perdido') statusClass = 'text-danger';
+                                    if (item.status === 'Emprestado') statusClass = 'text-warning';
+
+                                    html += `<li class="list-group-item d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <strong>${item.livro_titulo}</strong> (ISBN: ${item.isbn})<br>
+                                                    Status: <span class="${statusClass}">${item.status}</span><br>
+                                                    Entrega: ${item.data_entrega} (${item.conservacao_entrega})
+                                                    ${item.data_devolucao ? `<br>Devolução: ${item.data_devolucao} (${item.conservacao_devolucao})` : ''}
+                                                </div>
+                                            </li>`;
+                                });
+                                html += `</ul>`;
+                            }
+                        }
+                        historicoContentDiv.innerHTML = html;
+                    } else {
+                        historicoContentDiv.innerHTML = `<p class="text-danger">Erro ao carregar histórico: ${result.message}</p>`;
+                    }
+                })
+                .catch(err => {
+                    historicoContentDiv.innerHTML = `<p class="text-danger">Erro de comunicação ao carregar histórico.</p>`;
+                    console.error('Erro ao carregar histórico do aluno:', err);
+                });
         });
     });
     </script>
