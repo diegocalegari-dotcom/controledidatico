@@ -108,7 +108,7 @@ $conn->close();
                                                 break;
                                         }
                                     } else {
-                                        echo '<button class="btn btn-primary btn-sm btn-entregar" data-bs-toggle="modal" data-bs-target="#entregaModal" data-livro-id="' . $livro['id'] . '" data-livro-titulo="' . htmlspecialchars($livro['titulo']) . '" data-aluno-id="' . $aluno['id'] . '" data-aluno-nome="' . htmlspecialchars($aluno['nome']) . '""><i class="bi bi-plus-circle"></i> Entregar</button>';
+                                        echo '<button class="btn btn-primary btn-sm btn-entregar" data-bs-toggle="modal" data-bs-target="#entregaModal" data-livro-id="' . $livro['id'] . '" data-livro-titulo="' . htmlspecialchars($livro['titulo']) . '" data-aluno-id="' . $aluno['id'] . '" data-aluno-nome="' . htmlspecialchars($aluno['nome']) . '"><i class="bi bi-plus-circle"></i> Entregar</button>';
                                     }
                                     ?>
                                 </td>
@@ -178,97 +178,85 @@ $conn->close();
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Instâncias dos Modais
         const entregaModal = new bootstrap.Modal(document.getElementById('entregaModal'));
         const devolucaoModal = new bootstrap.Modal(document.getElementById('devolucaoModal'));
         let currentCell;
 
-        // Delegação de evento principal para a tabela
         document.querySelector('tbody').addEventListener('click', function(event) {
-            const target = event.target;
-            currentCell = target.closest('td');
+            const target = event.target.closest('button, a'); // Apenas botões ou links
+            if (!target) return;
 
-            // Lógica para abrir modal de ENTREGA
-            const entregarButton = target.closest('.btn-entregar');
-            if (entregarButton) {
-                document.getElementById('modal-aluno-nome').textContent = entregarButton.getAttribute('data-aluno-nome');
-                document.getElementById('modal-livro-titulo').textContent = entregarButton.getAttribute('data-livro-titulo');
-                document.getElementById('modal-aluno-id').value = entregarButton.getAttribute('data-aluno-id');
-                document.getElementById('modal-livro-id').value = entregarButton.getAttribute('data-livro-id');
-            }
+            currentCell = target.parentElement;
 
-            // Lógica para abrir modal de DEVOLUÇÃO
-            const devolverButton = target.closest('.btn-devolver');
-            if (devolverButton) {
-                document.getElementById('modal-devolucao-aluno-nome').textContent = devolverButton.getAttribute('data-aluno-nome');
-                document.getElementById('modal-devolucao-livro-titulo').textContent = devolverButton.getAttribute('data-livro-titulo');
-                document.getElementById('modal-devolucao-conservacao-entrega').textContent = devolverButton.getAttribute('data-conservacao-entrega');
-                document.getElementById('modal-emprestimo-id').value = devolverButton.getAttribute('data-emprestimo-id');
+            // Usa if/else if para garantir que apenas um bloco seja executado
+            if (target.classList.contains('btn-entregar')) {
+                document.getElementById('modal-aluno-nome').textContent = target.getAttribute('data-aluno-nome');
+                document.getElementById('modal-livro-titulo').textContent = target.getAttribute('data-livro-titulo');
+                document.getElementById('modal-aluno-id').value = target.getAttribute('data-aluno-id');
+                document.getElementById('modal-livro-id').value = target.getAttribute('data-livro-id');
+            } else if (target.classList.contains('btn-devolver')) {
+                document.getElementById('modal-devolucao-aluno-nome').textContent = target.getAttribute('data-aluno-nome');
+                document.getElementById('modal-devolucao-livro-titulo').textContent = target.getAttribute('data-livro-titulo');
+                document.getElementById('modal-devolucao-conservacao-entrega').textContent = target.getAttribute('data-conservacao-entrega');
+                document.getElementById('modal-emprestimo-id').value = target.getAttribute('data-emprestimo-id');
             }
         });
 
-        // Ação: Confirmar Entrega
         document.getElementById('btn-confirmar-entrega').addEventListener('click', function() {
-            const data = {
-                aluno_id: document.getElementById('modal-aluno-id').value,
-                livro_id: document.getElementById('modal-livro-id').value,
-                conservacao: document.getElementById('conservacao').value
-            };
-            fetch('api/registrar_emprestimo.php', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(data)
-            }).then(res => res.json()).then(result => {
-                if (result.success) {
-                    entregaModal.hide();
-                    location.reload();
-                } else { alert('Erro: ' + result.message); }
-            }).catch(err => alert('Erro de comunicação.'));
+            const data = { aluno_id: document.getElementById('modal-aluno-id').value, livro_id: document.getElementById('modal-livro-id').value, conservacao: document.getElementById('conservacao').value };
+            fetch('api/registrar_emprestimo.php', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
+            .then(res => res.json()).then(result => { if (result.success) { entregaModal.hide(); location.reload(); } else { alert('Erro: ' + result.message); } }).catch(err => alert('Erro de comunicação.'));
         });
 
-        // Ação: Cancelar Entrega
         document.getElementById('btn-cancelar-entrega').addEventListener('click', function() {
-            if (!confirm('Tem certeza que deseja cancelar este lançamento de entrega?')) return;
+            if (!confirm('Tem certeza que deseja CANCELAR esta entrega? A ação não pode ser desfeita.')) return;
             const data = { emprestimo_id: document.getElementById('modal-emprestimo-id').value };
-            fetch('api/cancelar_emprestimo.php', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(data)
-            }).then(res => res.json()).then(result => {
+            fetch('api/cancelar_emprestimo.php', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
+            .then(res => res.json()).then(result => { if (result.success) { devolucaoModal.hide(); location.reload(); } else { alert('Erro: ' + result.message); } }).catch(err => alert('Erro de comunicação.'));
+        });
+
+        document.getElementById('btn-confirmar-devolucao').addEventListener('click', function() {
+            const emprestimo_id = document.getElementById('modal-emprestimo-id').value;
+            const conservacao = document.getElementById('conservacao_devolucao').value;
+            const data = { emprestimo_id: emprestimo_id, conservacao: conservacao };
+
+            fetch('api/registrar_devolucao.php', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
+            .then(res => res.json()).then(result => {
                 if (result.success) {
                     devolucaoModal.hide();
                     location.reload();
-                } else { alert('Erro: ' + result.message); }
+                } else {
+                    alert('Erro: ' + result.message);
+                }
             }).catch(err => alert('Erro de comunicação.'));
         });
 
-        // Ação: Entregar Todos
-        document.querySelectorAll('.btn-entregar-todos').forEach(button => {
-            button.addEventListener('click', function() {
-                if (!confirm('Deseja entregar TODOS os livros pendentes para este aluno com o estado \'BOM\'?')) return;
-                const alunoId = this.getAttribute('data-aluno-id');
-                const linhaAluno = this.closest('tr');
-                const livrosAPegar = [];
-                linhaAluno.querySelectorAll('.btn-entregar').forEach(btnEntregar => {
-                    livrosAPegar.push(btnEntregar.getAttribute('data-livro-id'));
-                });
-                if (livrosAPegar.length === 0) {
-                    alert('Este aluno já possui todos os livros.');
-                    return;
+        document.getElementById('btn-marcar-perdido').addEventListener('click', function() {
+            if (!confirm('Tem certeza que deseja marcar este livro como PERDIDO?')) return;
+            const emprestimo_id = document.getElementById('modal-emprestimo-id').value;
+            const data = { emprestimo_id: emprestimo_id };
+
+            fetch('api/marcar_como_perdido.php', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
+            .then(res => res.json()).then(result => {
+                if (result.success) {
+                    devolucaoModal.hide();
+                    location.reload();
+                } else {
+                    alert('Erro: ' + result.message);
                 }
-                const data = { aluno_id: alunoId, livros_ids: livrosAPegar };
-                fetch('api/registrar_entrega_massa.php', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(data)
-                }).then(res => res.json()).then(result => {
-                    if (result.success) {
-                        location.reload();
-                    } else { alert('Erro: ' + result.message); }
-                }).catch(err => alert('Erro de comunicação.'));
-            });
+            }).catch(err => alert('Erro de comunicação.'));
         });
 
+        document.querySelectorAll('.btn-entregar-todos').forEach(button => {
+            button.addEventListener('click', function() {
+                if (!confirm('Entregar TODOS os livros pendentes para este aluno como \'BOM\'?')) return;
+                const data = { aluno_id: this.getAttribute('data-aluno-id'), livros_ids: [] };
+                this.closest('tr').querySelectorAll('.btn-entregar').forEach(btn => data.livros_ids.push(btn.getAttribute('data-livro-id')));
+                if (data.livros_ids.length === 0) { alert('Este aluno já possui todos os livros.'); return; }
+                fetch('api/registrar_entrega_massa.php', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
+                .then(res => res.json()).then(result => { if (result.success) { location.reload(); } else { alert('Erro: ' + result.message); } }).catch(err => alert('Erro de comunicação.'));
+            });
+        });
     });
     </script>
 </body>
