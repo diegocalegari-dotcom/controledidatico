@@ -1,0 +1,50 @@
+
+Gemini, preciso criar um aplicativo WEB para controle de livros didáticos – que são entregues para os estudantes.
+
+A) Estrutura:
+
+1. Livros: 
+1.1. Cada livro é relacionado a uma matéria de formação (matemática, português, geografia e etc);
+1.2. Cada série tem livros específicos para sua seriação. Entretanto, séries de um mesmo curso possuem a mesma quantidade de matérias. Exemplo: do 6º ao 9º ano do fundamental, temos Arte, Ciências, Inglês, Geografia, História, Português e Matemática. Já no ensino médio temos: Arte, Biologia, Geografia, História, Inglês, Física, Filosofia, Sociologia, Química, Português, Matemática;
+1.3. Cada livro tem um código de barras cujo número é o ISBN (International Standard Book Number). Isto faz com que Geografia, do 6º ano, por exemplo, tenha um número único para todos os exemplares;
+
+2. Estudantes:
+2.1. Cada curso tem determinado número de série, com suas turmas. Assim, o ensino médio pode ter vários 1º anos, turma A, B e C, por exemplo. O Novo Ensino Médio profissionalizante também pode ter vários 1º anos, turma A, B e C;
+2.2. O sistema do colégio disponibiliza planilhas com relação de alunos matriculados por curso, série e turma, em .xls e que podem ser salvas em .csv (deixarei exemplos na pasta: manhã e tarde);
+2.3. Um estudante pode ser transferido para outro estabelecimento de ensino, remanejado de turma ou curso e até mesmo ser excluído do sistema por não comparecer as aulas;
+2.4. Com o passar do tempo, o estudante pode ser aprovado – migrando para a próxima série – ou reprovado. Isso é importante para que você compreenda a utilização com o passar dos anos do sistema. Um estudante que inicia, em 2025, o 6º   ano, recebe livros desta série que devem ser registrado. Ao fim do ano, deve devolve-los e, no início de 2026, se foi aprovado, receberá os livros do 7º  - e por isso é importante checar se devolveu os livros do ano anterior
+
+3. Controle da quantidade:
+
+3.1. É de extrema importância que tenhamos o controle do quantitativo de livros. Tantos os devolvidos quanto os que tenhamos em reserva (que não foram entregues ou que chegam para complementar a quantidade já existem, e os devolvidos).
+3.2. O livros em reserva podem ser remanejados para outros estabelecimento de ensino – em algum momento, teremos que pensar nisso.
+
+B) Funcionamento
+
+1. Livros:
+1.1. Penso que o ideal é que, inicialmente, tenhamos uma interface para cadastrar livros para cada seriação dentro de determinado curso. Os campos para inclusão deverão ser: AUTOR(ES), TÍTULO, MATÉRIA (DENTRO DAS QUE CITEI), ISBN. O isbn será importante porque precisaremos, ao receber livros, ler o ISBN com um leitor ótico para facilitar o registro da devolução;
+
+1.2. Quando esses livros são entregues ou recebidos (devolução), devemos registrar a qualidade/estado de conservação deste livro – o quantitativo posterior deverá ser apresentado enquanto quantidade geral e separada por qualidade;
+
+1.3. Assim, tanto na entrega, quanto na devolução, teremos que selecionar o estudante e anotar a qualidade deste.
+
+1.4. A ideia é que, por padrão, a qualidade deva estar configurada como “BOM”. A qualidade será definida como:  “ÓTIMO”, “BOM”, “REGULAR”, “RUIM”e “PÉSSIMO”;
+
+1.5. Importante relembrar que, ao selecionar um estudante, tenhamos a possibilidade de escolher o livro e sua qualidade manualmente ou, lendo com leitor óptico, que ele já identifique o livro e dê a opção de escolher a qualidade;
+
+2. Curso, série, turma e estudante:
+2.1. O aplicativo deve ter um script para formar cada turma de uma série com base nos .xls ou .csv informados. Acredito que a melhor maneira uma interface que lembre uma planilha, mas que só libere a edição de devolução dos livros quando for clicado no estudante.
+
+2.2. Esta entrada de dados deve ter a possibilidade de edição. Também é importante ter a opção de informar quando um livro foi perdido – tanto após a entrega, quanto na devolução. Porque veja, um estudante pode ter recebido todos os livros mas, no decorrer do ano, perder algum deles – inclusive mais de uma vez. Ocorrendo isso, devemos informar e, tendo a possibilidade, disponibilizar um novo livro para o estudante. Isto tudo deve ser registrado e, no caso de disponibilizar mais um livro, inclusive, descontar do quantitativo.
+
+2.3. Um estudante, quando remanejado, deve levar as informações para a nova turma. Quando transferido, deve devolver os livros, momento em que deve entrar, novamente, no controle de quantitativo.
+
+3. Remanejamento e Reserva
+
+3.1. Quando novos livros chegam, devem compor a reserva de livros
+3.2. Deve também ter a possibilidade de remanejamento, tanto de recebimento de livros de outro estabelecimento quanto de cessão de livros.
+
+4. Analise todas as sugestões, de sua opinião e novas sugestões e vamos iniciar a criação.
+
+ 
+ 
