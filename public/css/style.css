@@ -6,3 +6,55 @@ body {
 .navbar {
     margin-bottom: 20px;
 }
+
+/* Estilos para a página de controle da turma */
+.table-responsive {
+    max-height: 80vh;
+}
+
+.table th {
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    max-width: 150px; /* Ajuste conforme necessário */
+}
+
+.table td, .table th {
+    vertical-align: middle;
+}
+
+.btn-entregar, .btn-devolver {
+    width: 100%;
+}
+
+/* Cores para o estado de conservação */
+.bg-otimo, .bg-bom { background-color: #198754 !important; color: white; }
+.bg-regular { background-color: #ffc107 !important; color: #000; }
+.bg-ruim { background-color: #fd7e14 !important; color: white; }
+.bg-pessimo { background-color: #dc3545 !important; color: white; }
+
+.badge.bg-otimo, .badge.bg-bom, .badge.bg-regular, .badge.bg-ruim, .badge.bg-pessimo {
+    font-size: 0.9em;
+    width: 100%;
+    display: inline-block;
+    padding-top: 0.55em;
+    padding-bottom: 0.55em;
+}
+
+/* Estilos para as opções do select */
+#conservacao, #conservacao_devolucao {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: none; /* Remove a seta padrão */
+}
+
+/* Estilos para as opções do select */
+select.form-select-colored option {
+    padding: 8px;
+    color: #000;
+}
+option[value='ÓTIMO'], option[value='BOM'] { background-color: #198754 !important; color: white !important; }
+option[value='REGULAR'] { background-color: #ffc107 !important; color: #000 !important; }
+option[value='RUIM'] { background-color: #fd7e14 !important; color: white !important; }
+option[value='PÉSSIMO'] { background-color: #dc3545 !important; color: white !important; }
