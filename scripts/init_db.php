@@ -68,7 +68,7 @@ CREATE TABLE materias (
 
 CREATE TABLE livros (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    isbn VARCHAR(20) NOT NULL UNIQUE,
+    isbn VARCHAR(20) DEFAULT NULL UNIQUE,
     titulo VARCHAR(255) NOT NULL,
     autor VARCHAR(255),
     materia_id INT NOT NULL,

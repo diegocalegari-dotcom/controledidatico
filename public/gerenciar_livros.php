@@ -34,11 +34,33 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
     }
     // Adicionar
-    elseif (isset($_POST['isbn'])) {
-        $stmt = $conn->prepare("INSERT INTO livros (isbn, titulo, autor, materia_id, serie_id) VALUES (?, ?, ?, ?, ?)");
-        $stmt->bind_param("sssii", $_POST['isbn'], $_POST['titulo'], $_POST['autor'], $_POST['materia_id'], $_POST['serie_id']);
-        if ($stmt->execute()) $mensagem = '<div class="alert alert-success">Livro adicionado com sucesso!</div>';
-        else $mensagem = '<div class="alert alert-danger">Erro ao adicionar livro. Verifique se o ISBN já existe.</div>';
+    elseif (isset($_POST['titulo']) && isset($_POST['serie_ids'])) { // Trigger alterado para um campo obrigatório e verifica serie_ids
+        $isbn = !empty($_POST['isbn']) ? $_POST['isbn'] : null; // Converte string vazia para NULL
+        $titulo = $_POST['titulo'];
+        $autor = $_POST['autor'];
+        $materia_id = $_POST['materia_id'];
+        $serie_ids = $_POST['serie_ids']; // Array de IDs de série
+
+        $success_count = 0;
+        $error_messages = [];
+
+        foreach ($serie_ids as $serie_id) {
+            $stmt = $conn->prepare("INSERT INTO livros (isbn, titulo, autor, materia_id, serie_id) VALUES (?, ?, ?, ?, ?)");
+            $stmt->bind_param("sssii", $isbn, $titulo, $autor, $materia_id, $serie_id);
+            if ($stmt->execute()) {
+                $success_count++;
+            } else {
+                $error_messages[] = "Erro ao adicionar livro para Série ID {$serie_id}: " . htmlspecialchars($stmt->error);
+            }
+            $stmt->close();
+        }
+
+        if ($success_count > 0) {
+            $mensagem = '<div class="alert alert-success">' . $success_count . ' livro(s) adicionado(s) com sucesso!</div>';
+        }
+        if (!empty($error_messages)) {
+            $mensagem .= '<div class="alert alert-danger">' . implode('<br>', $error_messages) . '</div>';
+        }
     }
 }
 
@@ -88,14 +110,14 @@ $livros = $conn->query("SELECT l.*, m.nome as materia_nome, s.nome as serie_nome
                         <div class="col-md-4">
                             <label class="form-label">ISBN</label>
                             <div class="input-group">
-                                <input type="text" class="form-control" id="isbn" name="isbn" required>
+                                <input type="text" class="form-control" id="isbn" name="isbn">
                                 <button class="btn btn-outline-secondary" type="button" id="buscar-isbn">Buscar</button>
                             </div>
                         </div>
                         <div class="col-md-8"><label class="form-label">Título</label><input type="text" class="form-control" id="titulo" name="titulo" required></div>
                         <div class="col-md-12"><label class="form-label">Autor(es)</label><input type="text" class="form-control" id="autor" name="autor"></div>
                         <div class="col-md-6"><label class="form-label">Matéria</label><select class="form-select" name="materia_id" required><option value="">Selecione...</option><?php while($m = $materias->fetch_assoc()) echo "<option value='{$m['id']}'>".htmlspecialchars($m['nome'])."</option>"; ?></select></div>
-                        <div class="col-md-6"><label class="form-label">Série</label><select class="form-select" name="serie_id" required><option value="">Selecione...</option><?php while($s = $series->fetch_assoc()) echo "<option value='{$s['id']}'>".htmlspecialchars($s['curso_nome'] . ' - ' . $s['nome'])."</option>"; ?></select></div>
+                        <div class="col-md-6"><label class="form-label">Série</label><select class="form-select" name="serie_ids[]" multiple size="5" required><option value="">Selecione...</option><?php while($s = $series->fetch_assoc()) echo "<option value='{$s['id']}'>".htmlspecialchars($s['curso_nome'] . ' - ' . $s['nome'])."</option>"; ?></select></div>
                         <div class="col-12"><button type="submit" class="btn btn-primary">Adicionar Livro</button></div>
                     </div>
                 </form>

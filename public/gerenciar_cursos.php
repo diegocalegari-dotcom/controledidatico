@@ -7,6 +7,24 @@ $view = isset($_GET['view']) && $_GET['view'] == 'archived' ? 'archived' : 'acti
 
 // Lógica de Ações
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    // Lógica de Ações em Massa
+    if (isset($_POST['bulk_action']) && isset($_POST['selected_cursos'])) {
+        $action = $_POST['bulk_action'];
+        $selected_ids = $_POST['selected_cursos'];
+        $placeholders = implode(',', array_fill(0, count($selected_ids), '?'));
+        $types = str_repeat('i', count($selected_ids));
+
+        if ($action == 'archive_selected') {
+            $stmt = $conn->prepare("UPDATE cursos SET status = 'ARQUIVADO' WHERE id IN ($placeholders)");
+            $stmt->bind_param($types, ...$selected_ids);
+            if ($stmt->execute()) $mensagem = '<div class="alert alert-success">Cursos arquivados com sucesso!</div>';
+        } elseif ($action == 'restore_selected') {
+            $stmt = $conn->prepare("UPDATE cursos SET status = 'ATIVO' WHERE id IN ($placeholders)");
+            $stmt->bind_param($types, ...$selected_ids);
+            if ($stmt->execute()) $mensagem = '<div class="alert alert-success">Cursos restaurados com sucesso!</div>';
+        }
+        if (isset($stmt)) $stmt->close();
+    }
     // Arquivar
     if (isset($_POST['archive_id'])) {
         $id = (int)$_POST['archive_id'];
@@ -115,37 +133,62 @@ $cursos = $conn->query("SELECT * FROM cursos WHERE status = '$status_filter' ORD
         <div class="card">
             <div class="card-header">Cursos <?php echo $view == 'active' ? 'Ativos' : 'Arquivados'; ?></div>
             <div class="card-body">
-                <table class="table table-striped">
-                    <thead><tr><th>Nome</th><th style="width: 220px;">Ações</th></tr></thead>
-                    <tbody>
-                        <?php while($row = $cursos->fetch_assoc()): ?>
-                        <tr>
-                            <td><?php echo htmlspecialchars($row['nome']); ?></td>
-                            <td>
-                                <?php if ($view == 'active'): ?>
-                                    <a href="editar_curso.php?id=<?php echo $row['id']; ?>" class="btn btn-sm btn-warning">Editar</a>
-                                    <form action="" method="POST" style="display: inline;">
-                                        <input type="hidden" name="archive_id" value="<?php echo $row['id']; ?>">
-                                        <button type="submit" class="btn btn-sm btn-secondary">Arquivar</button>
-                                    </form>
-                                <?php else: ?>
-                                    <form action="?view=archived" method="POST" style="display: inline;">
-                                        <input type="hidden" name="restore_id" value="<?php echo $row['id']; ?>">
-                                        <button type="submit" class="btn btn-sm btn-success">Restaurar</button>
-                                    </form>
-                                    <form action="?view=archived" method="POST" onsubmit="return confirm('ATENÇÃO! Isso excluirá o curso permanentemente. Deseja continuar?');" style="display: inline;">
-                                        <input type="hidden" name="delete_id" value="<?php echo $row['id']; ?>">
-                                        <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
-                                    </form>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                        <?php endwhile; ?>
-                    </tbody>
-                </table>
+                <form action="" method="POST" id="bulk_action_form">
+                    <div class="mb-3 d-flex align-items-center">
+                        <select name="bulk_action" class="form-select me-2" style="width: auto;">
+                            <option value="">Ações em massa</option>
+                            <option value="archive_selected">Arquivar Selecionados</option>
+                            <option value="restore_selected">Restaurar Selecionados</option>
+                        </select>
+                        <button type="submit" class="btn btn-info" onclick="return confirm('Confirmar ação em massa?');">Aplicar</button>
+                    </div>
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="select_all_cursos"></th>
+                                <th>Nome</th>
+                                <th style="width: 220px;">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php while($row = $cursos->fetch_assoc()): ?>
+                            <tr>
+                                <td><input type="checkbox" name="selected_cursos[]" value="<?php echo $row['id']; ?>"></td>
+                                <td><?php echo htmlspecialchars($row['nome']); ?></td>
+                                <td>
+                                    <?php if ($view == 'active'): ?>
+                                        <a href="editar_curso.php?id=<?php echo $row['id']; ?>" class="btn btn-sm btn-warning">Editar</a>
+                                        <form action="" method="POST" style="display: inline;">
+                                            <input type="hidden" name="archive_id" value="<?php echo $row['id']; ?>">
+                                            <button type="submit" class="btn btn-sm btn-secondary">Arquivar</button>
+                                        </form>
+                                    <?php else: ?>
+                                        <form action="?view=archived" method="POST" style="display: inline;">
+                                            <input type="hidden" name="restore_id" value="<?php echo $row['id']; ?>">
+                                            <button type="submit" class="btn btn-sm btn-success">Restaurar</button>
+                                        </form>
+                                        <form action="?view=archived" method="POST" onsubmit="return confirm('ATENÇÃO! Isso excluirá o curso permanentemente. Deseja continuar?');" style="display: inline;">
+                                            <input type="hidden" name="delete_id" value="<?php echo $row['id']; ?>">
+                                            <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
+                                        </form>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                            <?php endwhile; ?>
+                        </tbody>
+                    </table>
+                </form>
             </div>
         </div>
     </div>
+<script>
+    document.getElementById('select_all_cursos').addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('input[name="selected_cursos[]"]');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = this.checked;
+        });
+    });
+</script>
 </body>
 </html>
 <?php $conn->close(); ?>
