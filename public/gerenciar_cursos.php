@@ -11,19 +11,64 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (isset($_POST['bulk_action']) && isset($_POST['selected_cursos'])) {
         $action = $_POST['bulk_action'];
         $selected_ids = $_POST['selected_cursos'];
-        $placeholders = implode(',', array_fill(0, count($selected_ids), '?'));
-        $types = str_repeat('i', count($selected_ids));
+        $success_messages = [];
+        $error_messages = [];
 
         if ($action == 'archive_selected') {
+            $placeholders = implode(',', array_fill(0, count($selected_ids), '?'));
+            $types = str_repeat('i', count($selected_ids));
             $stmt = $conn->prepare("UPDATE cursos SET status = 'ARQUIVADO' WHERE id IN ($placeholders)");
             $stmt->bind_param($types, ...$selected_ids);
-            if ($stmt->execute()) $mensagem = '<div class="alert alert-success">Cursos arquivados com sucesso!</div>';
+            if ($stmt->execute()) $success_messages[] = 'Cursos arquivados com sucesso!';
+            else $error_messages[] = 'Erro ao arquivar cursos.';
+            if (isset($stmt)) $stmt->close();
         } elseif ($action == 'restore_selected') {
+            $placeholders = implode(',', array_fill(0, count($selected_ids), '?'));
+            $types = str_repeat('i', count($selected_ids));
             $stmt = $conn->prepare("UPDATE cursos SET status = 'ATIVO' WHERE id IN ($placeholders)");
             $stmt->bind_param($types, ...$selected_ids);
-            if ($stmt->execute()) $mensagem = '<div class="alert alert-success">Cursos restaurados com sucesso!</div>';
+            if ($stmt->execute()) $success_messages[] = 'Cursos restaurados com sucesso!';
+            else $error_messages[] = 'Erro ao restaurar cursos.';
+            if (isset($stmt)) $stmt->close();
+        } elseif ($action == 'delete_selected') {
+            foreach ($selected_ids as $id) {
+                $id = (int)$id;
+                // Check for active series associated with this course
+                $check_active_series_stmt = $conn->prepare("SELECT COUNT(*) FROM series WHERE curso_id = ? AND status = 'ATIVO'");
+                $check_active_series_stmt->bind_param("i", $id);
+                $check_active_series_stmt->execute();
+                $check_active_series_stmt->bind_result($active_series_count);
+                $check_active_series_stmt->fetch();
+                $check_active_series_stmt->close();
+
+                if ($active_series_count > 0) {
+                    $error_messages[] = "Não é possível excluir o curso ID {$id}, pois ele ainda possui séries ATIVAS associadas. Arquive-as primeiro.";
+                } else {
+                    $stmt = $conn->prepare("DELETE FROM cursos WHERE id = ?");
+                    $stmt->bind_param("i", $id);
+                    try {
+                        if ($stmt->execute()) {
+                            $success_messages[] = "Curso ID {$id} excluído permanentemente!";
+                        } else {
+                            $error_messages[] = "Erro ao excluir curso ID {$id}: " . $stmt->error;
+                        }
+                    } catch (mysqli_sql_exception $e) {
+                        if ($e->getCode() == 1451) {
+                            $error_messages[] = "Não é possível excluir o curso ID {$id}. Existem séries (arquivadas ou ativas) ainda associadas a ele. Por favor, exclua todas as séries associadas primeiro.";
+                        } else {
+                            $error_messages[] = "Erro ao excluir curso ID {$id}: " . $e->getMessage();
+                        }
+                    }
+                    if (isset($stmt)) $stmt->close();
+                }
+            }
         }
-        if (isset($stmt)) $stmt->close();
+        if (!empty($success_messages)) {
+            $mensagem .= '<div class="alert alert-success">' . implode('<br>', $success_messages) . '</div>';
+        }
+        if (!empty($error_messages)) {
+            $mensagem .= '<div class="alert alert-danger">' . implode('<br>', $error_messages) . '</div>';
+        }
     }
     // Arquivar
     if (isset($_POST['archive_id'])) {
@@ -44,18 +89,38 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // Excluir Permanentemente
     elseif (isset($_POST['delete_id'])) {
         $id = (int)$_POST['delete_id'];
-        $stmt = $conn->prepare("DELETE FROM cursos WHERE id = ?");
-        $stmt->bind_param("i", $id);
-        try {
-            if ($stmt->execute()) $mensagem = '<div class="alert alert-success">Curso excluído permanentemente!</div>';
-        } catch (mysqli_sql_exception $e) {
-            if ($e->getCode() == 1451) {
-                $mensagem = '<div class="alert alert-danger">Não é possível excluir este curso, pois ele ainda está sendo utilizado por séries ativas.</div>';
-            } else {
-                $mensagem = '<div class="alert alert-danger">Erro: ' . $e->getMessage() . '</div>';
+
+        // Check for active series associated with this course
+        $check_active_series_stmt = $conn->prepare("SELECT COUNT(*) FROM series WHERE curso_id = ? AND status = 'ATIVO'");
+        $check_active_series_stmt->bind_param("i", $id);
+        $check_active_series_stmt->execute();
+        $check_active_series_stmt->bind_result($active_series_count);
+        $check_active_series_stmt->fetch();
+        $check_active_series_stmt->close();
+
+        if ($active_series_count > 0) {
+            $mensagem = '<div class="alert alert-danger">Não é possível excluir este curso, pois ele ainda possui séries ATIVAS associadas. Arquive-as primeiro.</div>';
+        } else {
+            // If no active series, attempt to delete the course
+            $stmt = $conn->prepare("DELETE FROM cursos WHERE id = ?");
+            $stmt->bind_param("i", $id);
+            try {
+                if ($stmt->execute()) {
+                    $mensagem = '<div class="alert alert-success">Curso excluído permanentemente!</div>';
+                } else {
+                    // This catch block might not be reached if the execute() fails without an exception
+                    $mensagem = '<div class="alert alert-danger">Erro ao excluir curso: ' . $stmt->error . '</div>';
+                }
+            } catch (mysqli_sql_exception $e) {
+                if ($e->getCode() == 1451) {
+                    // This means there are still archived series preventing deletion
+                    $mensagem = '<div class="alert alert-danger">Não é possível excluir este curso. Existem séries (arquivadas ou ativas) ainda associadas a ele. Por favor, exclua todas as séries associadas primeiro.</div>';
+                } else {
+                    $mensagem = '<div class="alert alert-danger">Erro: ' . $e->getMessage() . '</div>';
+                }
             }
+            $stmt->close();
         }
-        $stmt->close();
     }
     // Adicionar Novo
     elseif (isset($_POST['nome_curso'])) {
@@ -139,8 +204,11 @@ $cursos = $conn->query("SELECT * FROM cursos WHERE status = '$status_filter' ORD
                             <option value="">Ações em massa</option>
                             <option value="archive_selected">Arquivar Selecionados</option>
                             <option value="restore_selected">Restaurar Selecionados</option>
+                            <?php if ($view == 'archived'): ?>
+                            <option value="delete_selected">Excluir Selecionados Permanentemente</option>
+                            <?php endif; ?>
                         </select>
-                        <button type="submit" class="btn btn-info" onclick="return confirm('Confirmar ação em massa?');">Aplicar</button>
+                        <button type="submit" class="btn btn-info" onclick="return confirmBulkAction(this.form);">Aplicar</button>
                     </div>
                     <table class="table table-striped">
                         <thead>
@@ -163,14 +231,8 @@ $cursos = $conn->query("SELECT * FROM cursos WHERE status = '$status_filter' ORD
                                             <button type="submit" class="btn btn-sm btn-secondary">Arquivar</button>
                                         </form>
                                     <?php else: ?>
-                                        <form action="?view=archived" method="POST" style="display: inline;">
-                                            <input type="hidden" name="restore_id" value="<?php echo $row['id']; ?>">
-                                            <button type="submit" class="btn btn-sm btn-success">Restaurar</button>
-                                        </form>
-                                        <form action="?view=archived" method="POST" onsubmit="return confirm('ATENÇÃO! Isso excluirá o curso permanentemente. Deseja continuar?');" style="display: inline;">
-                                            <input type="hidden" name="delete_id" value="<?php echo $row['id']; ?>">
-                                            <button type="submit" class="btn btn-sm btn-danger">Excluir</button>
-                                        </form>
+                                        <button type="button" class="btn btn-sm btn-success" onclick="submitRestoreForm(<?php echo $row['id']; ?>)">Restaurar</button>
+                                        <button type="button" class="btn btn-sm btn-danger" onclick="submitDeleteForm(<?php echo $row['id']; ?>)">Excluir</button>
                                     <?php endif; ?>
                                 </td>
                             </tr>
@@ -188,6 +250,46 @@ $cursos = $conn->query("SELECT * FROM cursos WHERE status = '$status_filter' ORD
             checkbox.checked = this.checked;
         });
     });
+
+    function confirmBulkAction(form) {
+        const selectElement = form.elements['bulk_action'];
+        if (selectElement.value === 'delete_selected') {
+            return confirm('ATENÇÃO! Você está prestes a EXCLUIR PERMANENTEMENTE os cursos selecionados. Esta ação não pode ser desfeita. Deseja continuar?');
+        }
+        return confirm('Confirmar ação em massa?');
+    }
+
+    function submitRestoreForm(id) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '?view=archived';
+
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'restore_id';
+        input.value = id;
+        form.appendChild(input);
+
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    function submitDeleteForm(id) {
+        if (confirm('ATENÇÃO! Isso excluirá o curso permanentemente. Deseja continuar?')) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '?view=archived';
+
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'delete_id';
+            input.value = id;
+            form.appendChild(input);
+
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
 </script>
 </body>
 </html>

@@ -155,7 +155,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_FILES['arquivo_csv'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Importar Alunos</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="css/style.css">
+    <style>
+        .alert .alert-heading i, .alert .step-heading i {
+            font-size: 1.5rem; /* Aumenta o tamanho do ícone */
+            margin-right: 10px; /* Adiciona espaço à direita */
+            vertical-align: middle; /* Alinha o ícone com o texto */
+        }
+        .alert .step-heading {
+            display: flex;
+            align-items: center;
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
@@ -190,6 +202,36 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_FILES['arquivo_csv'])) {
     </nav>
 
     <div class="container mt-4">
+        <!-- Caixa de Instruções -->
+        <div class="alert alert-info" role="alert">
+            <h4 class="alert-heading"><i class="bi bi-info-circle-fill"></i> Como Importar Corretamente</h4>
+            <p>Siga os passos abaixo para garantir uma importação de dados bem-sucedida.</p>
+            <hr>
+            <div class="row">
+                <div class="col-md-6">
+                    <h5 class="step-heading"><i class="bi bi-1-circle"></i> Passo 1: Importação Inicial</h5>
+                    <p>Primeiro, importe a relação de alunos matriculados por turma (manhã e/ou tarde). O sistema irá adicionar os novos cursos, séries e turmas automaticamente.</p>
+                    <ol>
+                        <li>Exporte a relação de alunos do sistema de gestão acadêmica em formato <strong>.xls</strong>.</li>
+                        <li>Abra o arquivo e salve-o como <strong>CSV (separado por vírgulas)</strong>.</li>
+                        <li>Use o formulário abaixo para importar este arquivo <strong>.csv</strong>.</li>
+                    </ol>
+                </div>
+                <div class="col-md-6">
+                    <h5 class="step-heading"><i class="bi bi-2-circle"></i> Passo 2: Limpeza e Importação Final</h5>
+                    <p>Após a primeira importação, alguns cursos e séries que não utilizam livros didáticos (como CELEM, PMA, etc.) podem ter sido criados. É importante arquivá-los.</p>
+                    <ol>
+                        <li>Vá para <a href="gerenciar_cursos.php" class="alert-link">Gerenciar Cursos</a> e <a href="gerenciar_series.php" class="alert-link">Gerenciar Séries</a> para arquivar os itens que não são relevantes.</li>
+                        <li><strong>Importe o mesmo arquivo .csv novamente.</strong></li>
+                        <li>Isso irá atualizar o cadastro dos estudantes, garantindo que eles sejam associados apenas às turmas e cursos corretos que utilizam o livro didático.</li>
+                    </ol>
+                </div>
+            </div>
+            <hr>
+            <p class="mb-0"><strong>Atenção:</strong> Este processo de duas etapas é crucial para evitar que estudantes de cursos complementares apareçam nas listas de entrega de livros.</p>
+        </div>
+        <!-- Fim da Caixa de Instruções -->
+
         <h2>Importar Alunos, Cursos, Séries e Turmas</h2>
         <p>Selecione o arquivo CSV de matrículas (como manha.csv ou tarde.csv) para popular o banco de dados automaticamente.</p>
         

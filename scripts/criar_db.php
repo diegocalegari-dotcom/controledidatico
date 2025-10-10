@@ -73,6 +73,7 @@ CREATE TABLE turmas (
     serie_id INT NOT NULL,
     turno ENUM('Manhã', 'Tarde', 'Noite') NOT NULL,
     ano_letivo YEAR NOT NULL,
+    status ENUM('ATIVO', 'ARQUIVADO') NOT NULL DEFAULT 'ATIVO',
     FOREIGN KEY (serie_id) REFERENCES series(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
