@@ -25,7 +25,15 @@ $stmt->bind_param("i", $emprestimo_id);
 
 if ($stmt->execute()) {
     if ($stmt->affected_rows > 0) {
-        echo json_encode(['success' => true, 'message' => 'Devolução revertida com sucesso!']);
+        // Fetch the updated loan details to return to the client
+        $select_stmt = $conn->prepare("SELECT id as emprestimo_id, aluno_id, livro_id, conservacao_entrega FROM emprestimos WHERE id = ?");
+        $select_stmt->bind_param("i", $emprestimo_id);
+        $select_stmt->execute();
+        $result = $select_stmt->get_result();
+        $emprestimo_revertido = $result->fetch_assoc();
+        $select_stmt->close();
+
+        echo json_encode(['success' => true, 'message' => 'Devolução revertida com sucesso!', 'reverted_loan' => $emprestimo_revertido]);
     } else {
         echo json_encode(['success' => false, 'message' => 'Nenhuma devolução encontrada para reverter.']);
     }

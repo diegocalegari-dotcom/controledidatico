@@ -111,9 +111,12 @@ function get_conservacao_class($conservacao) {
         .table td, .table th { text-align: center; vertical-align: middle; height: 55px; }
         .table th { width: 200px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .btn-reverter-devolucao { cursor: pointer; text-decoration: underline; }
+        .row-selected {
+            background-color: #cfe2ff !important; /* Bootstrap's primary-light color */
+        }
     </style>
 </head>
-<body data-ano-atual="<?php echo $ano_letivo_selecionado; ?>">
+<body data-ano-atual="<?php echo $ano_letivo_selecionado; ?>" data-sessao-ativa="<?php echo $sessao_ativa; ?>">
     <?php render_navbar(basename($_SERVER['PHP_SELF'])); ?>
 
     <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100"></div>
@@ -142,7 +145,7 @@ function get_conservacao_class($conservacao) {
                     <tr>
                         <th style="width: 50px;"></th>
                         <th style="width: 250px;">Aluno</th>
-                        <th style="width: 180px;">Ações em Massa</th>
+                        <th style="width: 180px;">Ações em Massa <small class="d-block fw-normal">(R na linha p/ reverter)</small></th>
                         <?php foreach ($livros_array as $livro): ?>
                             <th title="<?php echo htmlspecialchars($livro['titulo']); ?>"><?php echo htmlspecialchars($livro['titulo']); ?></th>
                         <?php endforeach; ?>
@@ -177,7 +180,7 @@ function get_conservacao_class($conservacao) {
                                             case 'Emprestado':
                                                 $conservacao = htmlspecialchars($emprestimo['conservacao']);
                                                 $classe_cor = get_conservacao_class($conservacao);
-                                                echo '<a href="#" class="badge ' . $classe_cor . ' text-decoration-none btn-devolver" data-bs-toggle="modal" data-bs-target="#devolucaoModal" data-emprestimo-id="' . $emprestimo['emprestimo_id'] . '" data-aluno-nome="' . htmlspecialchars($aluno['nome']) . '" data-livro-titulo="' . htmlspecialchars($livro['titulo']) . '" data-conservacao-entrega="' . $conservacao . '"
+                                                echo '<a href="#" class="badge ' . $classe_cor . ' text-decoration-none btn-devolver" data-bs-toggle="modal" data-bs-target="#devolucaoModal" data-emprestimo-id="' . $emprestimo['emprestimo_id'] . '" data-aluno-id="' . $aluno['id'] . '" data-livro-id="' . $livro['id'] . '" data-aluno-nome="' . htmlspecialchars($aluno['nome']) . '" data-livro-titulo="' . htmlspecialchars($livro['titulo']) . '" data-conservacao-entrega="' . $conservacao . '"
                                                        ><i class="bi bi-check-circle-fill"></i> ENTREGUE (' . $conservacao . ')</a>';
                                                 break;
                                             case 'Devolvido':
@@ -235,6 +238,8 @@ function get_conservacao_class($conservacao) {
                     <p><strong>Livro:</strong> <span id="modal-devolucao-livro-titulo"></span></p>
                     <p><strong>Conservação na Entrega:</strong> <span id="modal-devolucao-conservacao-entrega" class="badge"></span></p>
                     <input type="hidden" id="modal-emprestimo-id">
+                    <input type="hidden" id="modal-devolucao-aluno-id">
+                    <input type="hidden" id="modal-devolucao-livro-id">
                     <div class="mb-3 mt-3">
                         <label for="conservacao_devolucao" class="form-label">Estado de Conservação (Devolução)</label>
                         <select class="form-select form-select-colored" id="conservacao_devolucao" onchange="updateSelectColor(this)"><option>ÓTIMO</option><option selected>BOM</option><option>REGULAR</option><option>RUIM</option><option>PÉSSIMO</option></select>
@@ -242,10 +247,10 @@ function get_conservacao_class($conservacao) {
                 </div>
                 <div class="modal-footer justify-content-between">
                     <div>
-                        <button type="button" class="btn btn-danger" id="btn-cancelar-entrega">Cancelar Entrega</button>
-                        <button type="button" class="btn btn-warning ms-2" id="btn-marcar-perdido">Marcar como Perdido</button>
+                        <button type="button" class="btn btn-danger" id="btn-cancelar-entrega">(C) Cancelar Entrega</button>
+                        <button type="button" class="btn btn-warning ms-2" id="btn-marcar-perdido">(M) Marcar como Perdido</button>
                     </div>
-                    <div><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button><button type="button" class="btn btn-primary" id="btn-confirmar-devolucao">Confirmar Devolução</button></div>
+                    <div><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button><button type="button" class="btn btn-primary" id="btn-confirmar-devolucao">(D) Confirmar Devolução</button></div>
                 </div>
             </div>
         </div>
@@ -339,6 +344,25 @@ function get_conservacao_class($conservacao) {
     }
 
     document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('keydown', function(event) {
+            // Ignore if a modal is open or if typing in an input
+            if (document.querySelector('.modal.show') || event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT') {
+                return;
+            }
+
+            if (event.key.toLowerCase() === 'r') {
+                const selectedRow = document.querySelector('.row-selected');
+                if (selectedRow) {
+                    const revertButton = selectedRow.querySelector('.btn-reverter-devolucao');
+                    if (revertButton) {
+                        event.preventDefault();
+                        revertButton.click();
+                    } else {
+                        showToast('Nenhuma devolução para reverter neste aluno.', false);
+                    }
+                }
+            }
+        });
         const entregaModalEl = document.getElementById('entregaModal');
         const devolucaoModalEl = document.getElementById('devolucaoModal');
         const entregaModal = new bootstrap.Modal(entregaModalEl);
@@ -356,6 +380,30 @@ function get_conservacao_class($conservacao) {
         });
         devolucaoModalEl.addEventListener('shown.bs.modal', function () {
             updateSelectColor(document.getElementById('conservacao_devolucao'));
+        });
+
+        devolucaoModalEl.addEventListener('keydown', function(event) {
+            if (devolucaoModalEl.style.display === 'none' || devolucaoModalEl.style.visibility === 'hidden') {
+                return;
+            }
+            if (event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT' || event.target.tagName === 'TEXTAREA') {
+                return;
+            }
+
+            switch (event.key.toLowerCase()) {
+                case 'c':
+                    event.preventDefault();
+                    document.getElementById('btn-cancelar-entrega').click();
+                    break;
+                case 'm':
+                    event.preventDefault();
+                    document.getElementById('btn-marcar-perdido').click();
+                    break;
+                case 'd':
+                    event.preventDefault();
+                    document.getElementById('btn-confirmar-devolucao').click();
+                    break;
+            }
         });
 
         // --- Funções Helper ---
@@ -391,6 +439,16 @@ function get_conservacao_class($conservacao) {
         });
 
         document.querySelector('tbody').addEventListener('click', function(event) {
+            const tr = event.target.closest('tr');
+            if (tr) {
+                // Remove selection from other rows
+                tr.parentElement.querySelectorAll('.row-selected').forEach(selectedRow => {
+                    selectedRow.classList.remove('row-selected');
+                });
+                // Add selection to clicked row
+                tr.classList.add('row-selected');
+            }
+
             const target = event.target.closest('button, a');
             if (!target) return;
 
@@ -411,6 +469,8 @@ function get_conservacao_class($conservacao) {
                 document.getElementById('modal-devolucao-aluno-nome').textContent = target.dataset.alunoNome;
                 document.getElementById('modal-devolucao-livro-titulo').textContent = target.dataset.livroTitulo;
                 document.getElementById('modal-emprestimo-id').value = target.dataset.emprestimoId;
+                document.getElementById('modal-devolucao-aluno-id').value = target.dataset.alunoId;
+                document.getElementById('modal-devolucao-livro-id').value = target.dataset.livroId;
                 
                 conservacaoSpan.textContent = conservacaoEntrega;
                 conservacaoSpan.className = 'badge '; // Limpa classes antigas
@@ -420,9 +480,42 @@ function get_conservacao_class($conservacao) {
             } 
             else if (target.classList.contains('btn-reverter-devolucao')) {
                 const emprestimoId = target.dataset.emprestimoId;
-                if (!confirm(`Deseja reverter a devolução do livro?`)) return;
+                const alunoNome = target.dataset.alunoNome;
+                const livroTitulo = target.dataset.livroTitulo;
+
+                if (!confirm(`Deseja reverter a devolução do livro "${livroTitulo}" para o aluno ${alunoNome}?`)) return;
+                
                 fetch('api/reverter_devolucao.php', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ emprestimo_id: emprestimoId }) })
-                .then(handleResponse).then(result => handleSuccess(result, true)).catch(handleError);
+                .then(handleResponse)
+                .then(result => {
+                    if (result.success && result.reverted_loan) {
+                        const loan = result.reverted_loan;
+                        const alunoRow = document.querySelector(`tr[data-aluno-id="${loan.aluno_id}"]`);
+                        const cell = alunoRow ? alunoRow.querySelector(`td[data-livro-id="${loan.livro_id}"]`) : null;
+
+                        if (cell) {
+                            const conservacao = loan.conservacao_entrega;
+                            const classe_cor = getConservacaoClass(conservacao);
+                            const newBadge = `
+                                <a href="#" class="badge ${classe_cor} text-decoration-none btn-devolver" 
+                                   data-bs-toggle="modal" 
+                                   data-bs-target="#devolucaoModal" 
+                                   data-emprestimo-id="${loan.emprestimo_id}" 
+                                   data-aluno-id="${loan.aluno_id}" 
+                                   data-livro-id="${loan.livro_id}" 
+                                   data-aluno-nome="${alunoNome}" 
+                                   data-livro-titulo="${livroTitulo}" 
+                                   data-conservacao-entrega="${conservacao}">
+                                    <i class="bi bi-check-circle-fill"></i> ENTREGUE (${conservacao})
+                                </a>`;
+                            cell.innerHTML = newBadge;
+                        }
+                        handleSuccess(result, false);
+                    } else {
+                        handleError(new Error(result.message || 'Não foi possível reverter a devolução.'));
+                    }
+                })
+                .catch(handleError);
             } 
             else if (target.classList.contains('btn-gerenciar-aluno')) {
                 const alunoId = target.dataset.alunoId;
@@ -558,9 +651,35 @@ function get_conservacao_class($conservacao) {
 
         document.getElementById('btn-cancelar-entrega').addEventListener('click', function() {
             const emprestimoId = document.getElementById('modal-emprestimo-id').value;
+            const alunoId = document.getElementById('modal-devolucao-aluno-id').value;
+            const livroId = document.getElementById('modal-devolucao-livro-id').value;
+
             if (!confirm('Deseja CANCELAR esta entrega? A anotação será removida permanentemente.')) return;
+
             fetch('api/cancelar_emprestimo.php', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ emprestimo_id: emprestimoId }) })
-            .then(handleResponse).then(result => handleSuccess(result, true)).catch(handleError);
+            .then(handleResponse)
+            .then(result => {
+                if (result.success) {
+                    devolucaoModal.hide();
+                    
+                    const alunoRow = document.querySelector(`tr[data-aluno-id="${alunoId}"]`);
+                    const cell = alunoRow ? alunoRow.querySelector(`td[data-livro-id="${livroId}"]`) : null;
+
+                    if (cell) {
+                        const livroTitulo = document.getElementById('modal-devolucao-livro-titulo').textContent;
+                        const alunoNome = document.getElementById('modal-devolucao-aluno-nome').textContent;
+                        const sessaoAtiva = document.body.dataset.sessaoAtiva;
+                        const disabled = sessaoAtiva === 'DEVOLUCAO' ? 'disabled' : '';
+
+                        cell.innerHTML = `<button class="btn btn-primary btn-sm btn-entregar" data-bs-toggle="modal" data-bs-target="#entregaModal" data-livro-id="${livroId}" data-livro-titulo="${livroTitulo}" data-aluno-id="${alunoId}" data-aluno-nome="${alunoNome}" ${disabled}><i class="bi bi-plus-circle"></i> Entregar</button>`;
+                    }
+                    
+                    handleSuccess(result, false); // Set reload to false
+                } else {
+                    handleError(new Error(result.message));
+                }
+            })
+            .catch(handleError);
         });
 
         document.getElementById('btn-marcar-perdido').addEventListener('click', function() {
