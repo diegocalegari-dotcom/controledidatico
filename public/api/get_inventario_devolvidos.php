@@ -25,7 +25,7 @@ $sql = "
     JOIN turmas t ON est.turma_id = t.id
     JOIN series s ON t.serie_id = s.id
     WHERE e.ano_letivo = ?
-    AND (e.status = 'Devolvido' OR e.status = 'Perdido')
+        AND e.status = 'Devolvido'
     GROUP BY s.nome, l.id, l.titulo, COALESCE(e.conservacao_devolucao, e.status)
     ORDER BY s.nome, l.titulo, status;
 ";

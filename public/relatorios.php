@@ -1,5 +1,6 @@
 <?php
 require_once '../config/database.php';
+require_once 'components/navbar.php';
 $conn = connect_db();
 
 // Busca anos letivos para o dropdown de relatórios anuais
@@ -19,14 +20,7 @@ $display_statuses = [
     'PERDIDO' => ['bg' => 'bg-orange', 'text' => 'text-white'],
 ];
 
-// Mapeia os valores do banco de dados para os novos rótulos (para o modal)
-$status_map_for_modal = [
-    'NOVO' => 'ÓTIMO',
-    'BOM' => 'BOM',
-    'USADO' => 'REGULAR',
-    'DANIFICADO' => 'RUIM',
-    'PÉSSIMO' => 'PÉSSIMO', // Novo status
-];
+
 
 $conn->close();
 ?>
@@ -64,23 +58,7 @@ $conn->close();
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="index.php">Controle Didático</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link" href="gerenciar_materias.php">Matérias</a></li>
-                    <li class="nav-item"><a class="nav-link" href="gerenciar_cursos.php">Cursos</a></li>
-                    <li class="nav-item"><a class="nav-link" href="gerenciar_series.php">Séries</a></li>
-                    <li class="nav-item"><a class="nav-link" href="gerenciar_livros.php">Livros</a></li>
-                    <li class="nav-item"><a class="nav-link" href="importar.php">Importar Alunos</a></li>
-                    <li class="nav-item"><a class="nav-link" href="configuracoes.php">Configurações</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="relatorios.php">Relatórios</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+        <?php render_navbar(basename($_SERVER['PHP_SELF'])); ?>
 
     <div class="container mt-4">
         <ul class="nav nav-tabs" id="relatoriosTab" role="tablist">
@@ -183,8 +161,8 @@ $conn->close();
               <div class="mb-3">
                 <label for="conservacaoReserva" class="form-label">Estado de Conservação</label>
                 <select class="form-select" id="conservacaoReserva" name="conservacao" required>
-                    <?php foreach ($status_map_for_modal as $db_val => $display_val): ?>
-                        <option value="<?php echo $db_val; ?>"><?php echo $display_val; ?></option>
+                    <?php foreach ($display_statuses as $status => $details): ?>
+                        <option value="<?php echo $status; ?>"><?php echo $status; ?></option>
                     <?php endforeach; ?>
                 </select>
               </div>
@@ -214,13 +192,7 @@ $conn->close();
             }
 
             const conservationStatuses = <?php echo json_encode($display_statuses); ?>;
-            const statusMap = {
-                'NOVO': 'ÓTIMO',
-                'BOM': 'BOM',
-                'USADO': 'REGULAR',
-                'DANIFICADO': 'RUIM',
-                'PERDIDO': 'PERDIDO'
-            };
+            
 
             const reservaModalElem = document.getElementById('reservaModal');
             const reservaModal = reservaModalElem ? new bootstrap.Modal(reservaModalElem) : null;
@@ -282,7 +254,7 @@ $conn->close();
                     const [circulacaoRes, devolvidosRes, reservaRes] = await Promise.all([
                         fetch(`api/get_inventario_circulacao.php?ano=${anoLetivo}`),
                         fetch(`api/get_inventario_devolvidos.php?ano=${anoLetivo}`),
-                        fetch(`api/get_reserva_tecnica.php?ano=${anoLetivo}`)
+                        fetch(`api/get_inventario_reserva_tecnica.php?ano=${anoLetivo}`)
                     ]);
 
                     if (!circulacaoRes.ok || !devolvidosRes.ok || !reservaRes.ok) {
@@ -366,7 +338,7 @@ $conn->close();
                         statuses.forEach(s => acc[key].counts[s] = 0);
                     }
                     const dbStatus = (row.status || 'desconhecido').toUpperCase();
-                    const displayStatus = statusMap[dbStatus] || dbStatus;
+                    const displayStatus = dbStatus;
 
                     if (acc[key].counts.hasOwnProperty(displayStatus)) {
                         acc[key].counts[displayStatus] += parseInt(row.total || row.quantidade || 0);

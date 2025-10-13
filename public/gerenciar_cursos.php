@@ -1,5 +1,6 @@
 <?php
 require_once '../config/database.php';
+require_once 'components/navbar.php';
 $conn = connect_db();
 
 $mensagem = '';
@@ -147,26 +148,7 @@ $cursos = $conn->query("SELECT * FROM cursos WHERE status = '$status_filter' ORD
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="index.php">Controle Didático</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span class="navbar-toggler-icon"></span></button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link" href="gerenciar_materias.php">Matérias</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="gerenciar_cursos.php">Cursos</a></li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="gerenciar_series.php">Séries</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="gerenciar_livros.php">Livros</a>
-                    </li>
-                    <li class="nav-item"><a class="nav-link" href="importar.php">Importar Alunos</a></li>
-                    <li class="nav-item"><a class="nav-link" href="configuracoes.php">Configurações</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+    <?php render_navbar(basename($_SERVER['PHP_SELF'])); ?>
     <div class="container mt-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h2>Gerenciar Cursos (<?php echo $view == 'active' ? 'Ativos' : 'Arquivados'; ?>)</h2>

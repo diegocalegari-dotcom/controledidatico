@@ -1,6 +1,7 @@
 <?php
-header('Content-Type: application/json');
 require_once '../../config/database.php';
+
+header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -10,38 +11,33 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $data = json_decode(file_get_contents('php://input'), true);
 
-$livro_id = isset($data['livro_id']) ? (int)$data['livro_id'] : 0;
-$conservacao = isset($data['conservacao']) ? $data['conservacao'] : '';
-$quantidade = isset($data['quantidade']) ? (int)$data['quantidade'] : 0;
-$ano_letivo = isset($data['ano_letivo']) ? (int)$data['ano_letivo'] : 0;
-$action = isset($data['action_type']) ? $data['action_type'] : 'add';
+$livro_id = $data['livro_id'] ?? null;
+$conservacao = $data['conservacao'] ?? null;
+$quantidade = $data['quantidade'] ?? null;
+$ano_letivo = $data['ano_letivo'] ?? date('Y'); // Default to current year
 
-if (!$livro_id || !$conservacao || !$ano_letivo || $quantidade <= 0) {
+$valid_conservacao = ['ÓTIMO', 'BOM', 'REGULAR', 'RUIM', 'PÉSSIMO'];
+
+if (!$livro_id || !$conservacao || !in_array($conservacao, $valid_conservacao) || !is_numeric($quantidade) || $quantidade < 0) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'message' => 'Dados inválidos. A quantidade deve ser maior que zero.', 'received' => $data]);
+    echo json_encode(['success' => false, 'message' => 'Dados inválidos.']);
     exit;
 }
 
 $conn = connect_db();
 
-// Determina a quantidade a ser adicionada ou removida
-$valor_ajuste = ($action === 'remove') ? -abs($quantidade) : abs($quantidade);
-
-$sql = "
-    INSERT INTO reserva_tecnica (livro_id, conservacao, ano_letivo, quantidade)
-    VALUES (?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE quantidade = GREATEST(0, quantidade + ?);
-";
+$sql = "INSERT INTO reserva_tecnica (livro_id, conservacao, quantidade, ano_letivo)
+        VALUES (?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE quantidade = VALUES(quantidade)";
 
 $stmt = $conn->prepare($sql);
-// Para o INSERT inicial, usamos a quantidade absoluta. Para o UPDATE, o valor de ajuste.
-$stmt->bind_param("issii", $livro_id, $conservacao, $ano_letivo, abs($quantidade), $valor_ajuste);
+$stmt->bind_param("isis", $livro_id, $conservacao, $quantidade, $ano_letivo);
 
 if ($stmt->execute()) {
-    echo json_encode(['success' => true, 'message' => 'Reserva técnica atualizada com sucesso.']);
+    echo json_encode(['success' => true, 'message' => 'Reserva técnica atualizada com sucesso!']);
 } else {
     http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'Erro ao atualizar a reserva técnica.', 'db_error' => $stmt->error]);
+    echo json_encode(['success' => false, 'message' => 'Erro ao atualizar a reserva técnica: ' . $stmt->error]);
 }
 
 $stmt->close();

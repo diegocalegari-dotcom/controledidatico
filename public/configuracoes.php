@@ -1,4 +1,6 @@
 <?php
+require_once '../config/database.php';
+require_once 'components/navbar.php';
 $mensagem = '';
 $frase_confirmacao = "tenho certeza que desejo apagar os dados salvos";
 
@@ -27,21 +29,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="index.php">Controle Didático</a>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav">
-                    <li class="nav-item"><a class="nav-link" href="gerenciar_materias.php">Matérias</a></li>
-                    <li class="nav-item"><a class="nav-link" href="gerenciar_cursos.php">Cursos</a></li>
-                    <li class="nav-item"><a class="nav-link" href="gerenciar_series.php">Séries</a></li>
-                    <li class="nav-item"><a class="nav-link" href="gerenciar_livros.php">Livros</a></li>
-                    <li class="nav-item"><a class="nav-link" href="importar.php">Importar Alunos</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="configuracoes.php">Configurações</a></li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+    <?php render_navbar(basename($_SERVER['PHP_SELF'])); ?>
 
     <div class="container mt-4">
         <h2>Configurações</h2>

@@ -32,7 +32,15 @@ $stmt->bind_param("si", $conservacao_devolucao, $emprestimo_id);
 
 if ($stmt->execute()) {
     if ($stmt->affected_rows > 0) {
-        echo json_encode(['success' => true, 'message' => 'Devolução registrada com sucesso!']);
+        $devolucao_data = [
+            'emprestimo_id' => $emprestimo_id,
+            'conservacao_devolucao' => $conservacao_devolucao
+        ];
+        echo json_encode([
+            'success' => true, 
+            'message' => 'Devolução registrada com sucesso!',
+            'devolucao' => $devolucao_data
+        ]);
     } else {
         http_response_code(404);
         echo json_encode(['success' => false, 'message' => 'Empréstimo não encontrado ou já atualizado.']);

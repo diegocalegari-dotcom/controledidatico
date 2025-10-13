@@ -38,6 +38,7 @@ DROP TABLE IF EXISTS series;
 DROP TABLE IF EXISTS cursos;
 DROP TABLE IF EXISTS anos_letivos;
 DROP TABLE IF EXISTS reserva_tecnica;
+
 DROP TABLE IF EXISTS configuracoes;
 SET FOREIGN_KEY_CHECKS = 1;
 ";

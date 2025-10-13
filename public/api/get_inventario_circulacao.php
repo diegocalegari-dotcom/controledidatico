@@ -17,7 +17,10 @@ $sql = "
         s.nome AS serie_nome,
         l.id AS livro_id,
         l.titulo AS livro,
-        e.conservacao_entrega AS status,
+                CASE 
+            WHEN e.status = 'Perdido' THEN 'PERDIDO'
+            ELSE e.conservacao_entrega 
+        END AS status,
         COUNT(e.id) AS total
     FROM emprestimos e
     JOIN livros l ON e.livro_id = l.id
@@ -25,7 +28,7 @@ $sql = "
     JOIN turmas t ON est.turma_id = t.id
     JOIN series s ON t.serie_id = s.id
     WHERE e.ano_letivo = ?
-    AND e.status = 'Emprestado'
+        AND (e.status = 'Emprestado' OR e.status = 'Perdido')
     GROUP BY s.nome, l.id, l.titulo, e.conservacao_entrega
     ORDER BY s.nome, l.titulo, status;
 ";

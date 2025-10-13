@@ -1,5 +1,6 @@
 <?php
 require_once '../config/database.php';
+require_once 'components/navbar.php';
 
 $mensagem = '';
 
@@ -170,36 +171,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_FILES['arquivo_csv'])) {
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="index.php">Controle Didático</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="gerenciar_materias.php">Matérias</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="gerenciar_cursos.php">Cursos</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="gerenciar_series.php">Séries</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="gerenciar_livros.php">Livros</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="importar.php">Importar Alunos</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="configuracoes.php">Configurações</a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+    <?php render_navbar(basename($_SERVER['PHP_SELF'])); ?>
 
     <div class="container mt-4">
         <!-- Caixa de Instruções -->

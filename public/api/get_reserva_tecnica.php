@@ -1,48 +1,50 @@
 <?php
-header('Content-Type: application/json');
 require_once '../../config/database.php';
 
-$ano_letivo = isset($_GET['ano']) ? (int)$_GET['ano'] : 0;
-
-if (!$ano_letivo) {
-    http_response_code(400);
-    echo json_encode(['error' => 'Ano letivo não especificado.']);
-    exit;
-}
-
+header('Content-Type: application/json');
 $conn = connect_db();
 
-$sql = "
-    SELECT
-        s.nome AS serie_nome,
-        l.id AS livro_id,
-        l.titulo AS livro,
-        rt.conservacao AS status,
-        rt.quantidade
-    FROM reserva_tecnica rt
-    JOIN livros l ON rt.livro_id = l.id
-    JOIN series s ON l.serie_id = s.id
-    WHERE rt.ano_letivo = ?
-    ORDER BY s.nome, l.titulo, rt.conservacao;
-";
+$ano_letivo = date('Y'); // Or get from a parameter if needed later
 
-$stmt = $conn->prepare($sql);
-$stmt->bind_param("i", $ano_letivo);
-$stmt->execute();
-$result = $stmt->get_result();
+// 1. Get all active books with their series and course names
+$livros_sql = "SELECT l.id, l.titulo, s.nome as serie_nome, c.nome as curso_nome
+               FROM livros l
+               JOIN series s ON l.serie_id = s.id
+               JOIN cursos c ON s.curso_id = c.id
+               WHERE l.status = 'ATIVO'
+               ORDER BY c.nome, s.nome, l.titulo";
 
-$reserva = [];
-while ($row = $result->fetch_assoc()) {
-    $serie = $row['serie_nome'];
-    if (!isset($reserva[$serie])) {
-        $reserva[$serie] = [];
-    }
-    unset($row['serie_nome']);
-    $reserva[$serie][] = $row;
+$livros_result = $conn->query($livros_sql);
+$livros = [];
+while ($row = $livros_result->fetch_assoc()) {
+    // Initialize reserves for each book
+    $row['reservas'] = [
+        'ÓTIMO' => 0,
+        'BOM' => 0,
+        'REGULAR' => 0,
+        'RUIM' => 0,
+        'PÉSSIMO' => 0
+    ];
+    $livros[$row['id']] = $row;
 }
 
-$stmt->close();
+// 2. Get the technical reserve counts for the current year
+$reserva_sql = "SELECT livro_id, conservacao, quantidade
+                FROM reserva_tecnica
+                WHERE ano_letivo = ?";
+$stmt = $conn->prepare($reserva_sql);
+$stmt->bind_param("s", $ano_letivo);
+$stmt->execute();
+$reserva_result = $stmt->get_result();
+
+while ($row = $reserva_result->fetch_assoc()) {
+    if (isset($livros[$row['livro_id']])) {
+        $livros[$row['livro_id']]['reservas'][$row['conservacao']] = (int)$row['quantidade'];
+    }
+}
+
 $conn->close();
 
-echo json_encode($reserva);
+// Return as a flat array for the client
+echo json_encode(['success' => true, 'data' => array_values($livros)]);
 ?>

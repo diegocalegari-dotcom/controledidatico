@@ -1,0 +1,1 @@
+SELECT id, nome, status FROM cursos WHERE nome = 'PMA-PROGRAMA MAIS APRENDIZAGEM';
