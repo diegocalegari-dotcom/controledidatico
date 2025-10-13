@@ -59,7 +59,7 @@ $livros = $livros_q->get_result();
 $livros_array = $livros->fetch_all(MYSQLI_ASSOC);
 
 // Busca os empréstimos existentes para montar o grid
-$emprestimos_q = $conn->prepare("SELECT id as emprestimo_id, estudante_id, livro_id, status, conservacao_entrega, conservacao_devolucao FROM emprestimos WHERE ano_letivo = ?");
+$emprestimos_q = $conn->prepare("SELECT id as emprestimo_id, estudante_id, livro_id, status, conservacao_entrega, conservacao_devolucao, dado_como_perdido FROM emprestimos WHERE ano_letivo = ?");
 $emprestimos_q->bind_param("s", $ano_letivo_selecionado);
 $emprestimos_q->execute();
 $emprestimos_r = $emprestimos_q->get_result();
@@ -69,7 +69,8 @@ while($e = $emprestimos_r->fetch_assoc()) {
         'emprestimo_id' => $e['emprestimo_id'],
         'status' => $e['status'],
         'conservacao' => $e['conservacao_entrega'],
-        'conservacao_devolucao' => $e['conservacao_devolucao']
+                'conservacao_devolucao' => $e['conservacao_devolucao'],
+        'dado_como_perdido' => $e['dado_como_perdido']
     ];
 }
 
@@ -180,16 +181,17 @@ function get_conservacao_class($conservacao) {
                                             case 'Emprestado':
                                                 $conservacao = htmlspecialchars($emprestimo['conservacao']);
                                                 $classe_cor = get_conservacao_class($conservacao);
-                                                echo '<a href="#" class="badge ' . $classe_cor . ' text-decoration-none btn-devolver" data-bs-toggle="modal" data-bs-target="#devolucaoModal" data-emprestimo-id="' . $emprestimo['emprestimo_id'] . '" data-aluno-id="' . $aluno['id'] . '" data-livro-id="' . $livro['id'] . '" data-aluno-nome="' . htmlspecialchars($aluno['nome']) . '" data-livro-titulo="' . htmlspecialchars($livro['titulo']) . '" data-conservacao-entrega="' . $conservacao . '"
+                                                $perdido_icon = '';
+                                                if (!empty($emprestimo['dado_como_perdido'])) {
+                                                    $perdido_icon = '<i class="bi bi-exclamation-triangle-fill text-warning me-1" title="Este livro foi marcado como perdido"></i>';
+                                                }
+                                                echo $perdido_icon . '<a href="#" class="badge ' . $classe_cor . ' text-decoration-none btn-devolver" data-bs-toggle="modal" data-bs-target="#devolucaoModal" data-emprestimo-id="' . $emprestimo['emprestimo_id'] . '" data-aluno-id="' . $aluno['id'] . '" data-livro-id="' . $livro['id'] . '" data-aluno-nome="' . htmlspecialchars($aluno['nome']) . '" data-livro-titulo="' . htmlspecialchars($livro['titulo']) . '" data-conservacao-entrega="' . $conservacao . '"
                                                        ><i class="bi bi-check-circle-fill"></i> ENTREGUE (' . $conservacao . ')</a>';
                                                 break;
                                             case 'Devolvido':
                                                 $conservacao_devolucao = htmlspecialchars($emprestimo['conservacao_devolucao']);
                                                 $classe_cor = get_conservacao_class($conservacao_devolucao);
-                                                echo '<a class="badge ' . $classe_cor . ' text-decoration-none btn-reverter-devolucao" title="Reverter Devolução" data-emprestimo-id="' . $emprestimo['emprestimo_id'] . '" data-aluno-nome="' . htmlspecialchars($aluno['nome']) . '" data-livro-titulo="' . htmlspecialchars($livro['titulo']) . '"><i class="bi bi-arrow-counterclockwise"></i> DEVOLVIDO (' . $conservacao_devolucao . ')</a>';
-                                                break;
-                                            case 'Perdido':
-                                                echo '<span class="badge bg-danger text-white"><i class="bi bi-exclamation-triangle-fill"></i> Perdido</span>';
+                                                echo '<a class="badge ' . $classe_cor . ' text-decoration-none btn-reverter-devolucao" title="Reverter Devolução" data-emprestimo-id="' . $emprestimo['emprestimo_id'] . '" data-aluno-nome="' . htmlspecialchars($aluno['nome']) . '" data-livro-titulo="' . htmlspecialchars($livro['titulo']) . '" data-revert-conservacao="' . $emprestimo['conservacao'] . '"><i class="bi bi-arrow-counterclockwise"></i> DEVOLVIDO (' . $conservacao_devolucao . ')</a>';
                                                 break;
                                         }
                                     } else {
@@ -529,20 +531,23 @@ function get_conservacao_class($conservacao) {
 
                         if (cell) {
                             const conservacao = loan.conservacao_entrega;
-                            const classe_cor = getConservacaoClass(conservacao);
-                            const newBadge = `
-                                <a href="#" class="badge ${classe_cor} text-decoration-none btn-devolver" 
-                                   data-bs-toggle="modal" 
-                                   data-bs-target="#devolucaoModal" 
-                                   data-emprestimo-id="${loan.emprestimo_id}" 
-                                   data-aluno-id="${loan.aluno_id}" 
-                                   data-livro-id="${loan.livro_id}" 
-                                   data-aluno-nome="${alunoNome}" 
-                                   data-livro-titulo="${livroTitulo}" 
-                                   data-conservacao-entrega="${conservacao}">
-                                    <i class="bi bi-check-circle-fill"></i> ENTREGUE (${conservacao})
-                                </a>`;
-                            cell.innerHTML = newBadge;
+                            const newBadge = document.createElement('a');
+
+                            newBadge.href = '#';
+                            newBadge.className = `badge ${getConservacaoClass(conservacao)} text-decoration-none btn-devolver`;
+                            newBadge.innerHTML = `<i class="bi bi-check-circle-fill"></i> ENTREGUE (${conservacao})`;
+                            
+                            newBadge.dataset.bsToggle = 'modal';
+                            newBadge.dataset.bsTarget = '#devolucaoModal';
+                            newBadge.dataset.emprestimoId = loan.emprestimo_id;
+                            newBadge.dataset.alunoId = loan.aluno_id;
+                            newBadge.dataset.livroId = loan.livro_id;
+                            newBadge.dataset.alunoNome = alunoNome;
+                            newBadge.dataset.livroTitulo = livroTitulo;
+                            newBadge.dataset.conservacaoEntrega = conservacao;
+
+                            cell.innerHTML = '';
+                            cell.appendChild(newBadge);
                         }
                         handleSuccess(result, false);
                     } else {
@@ -692,17 +697,25 @@ function get_conservacao_class($conservacao) {
                     const cell = alunoRow ? alunoRow.querySelector(`td[data-livro-id="${livroId}"]`) : null;
 
                     if (cell) {
-                        const alunoNome = document.getElementById('modal-devolucao-aluno-nome').textContent;
-                        const livroTitulo = document.getElementById('modal-devolucao-livro-titulo').textContent;
-                        const newBadge = `
-                            <a class="badge ${getConservacaoClass(dev.conservacao_devolucao)} text-decoration-none btn-reverter-devolucao" 
-                               title="Reverter Devolução" 
-                               data-emprestimo-id="${dev.emprestimo_id}" 
-                               data-aluno-nome="${alunoNome}" 
-                               data-livro-titulo="${livroTitulo}">
-                                <i class="bi bi-arrow-counterclockwise"></i> DEVOLVIDO (${dev.conservacao_devolucao})
-                            </a>`;
-                        cell.innerHTML = newBadge;
+                        // Create the new link element
+                        const newBadge = document.createElement('a');
+
+                        // Set its classes and visual text
+                        newBadge.className = `badge ${getConservacaoClass(dev.conservacao_devolucao)} text-decoration-none btn-reverter-devolucao`;
+                        newBadge.title = 'Reverter Devolução';
+                        newBadge.innerHTML = `<i class="bi bi-arrow-counterclockwise"></i> DEVOLVIDO (${dev.conservacao_devolucao})`;
+
+                        // Set all the data attributes
+                        newBadge.dataset.emprestimoId = dev.emprestimo_id;
+                        newBadge.dataset.alunoId = alunoId;
+                        newBadge.dataset.livroId = livroId;
+                        newBadge.dataset.alunoNome = document.getElementById('modal-devolucao-aluno-nome').textContent;
+                        newBadge.dataset.livroTitulo = document.getElementById('modal-devolucao-livro-titulo').textContent;
+                        newBadge.dataset.revertConservacao = document.getElementById('modal-devolucao-conservacao-entrega').textContent;
+
+                        // Clear the cell and append the new, correctly-built element
+                        cell.innerHTML = '';
+                        cell.appendChild(newBadge);
                     }
                     handleSuccess(result, false); // No reload
                 } else {
@@ -733,8 +746,23 @@ function get_conservacao_class($conservacao) {
 
                     if (cell) {
                         const sessaoAtiva = document.body.dataset.sessaoAtiva;
-                        const disabled = sessaoAtiva === 'DEVOLUCAO' ? 'disabled' : '';
-                        cell.innerHTML = `<button class="btn btn-primary btn-sm btn-entregar" data-bs-toggle="modal" data-bs-target="#entregaModal" data-livro-id="${livroId}" data-livro-titulo="${livroTitulo}" data-aluno-id="${alunoId}" data-aluno-nome="${alunoNome}" ${disabled}><i class="bi bi-plus-circle"></i> Entregar</button>`;
+                        const newButton = document.createElement('button');
+                        
+                        newButton.className = 'btn btn-primary btn-sm btn-entregar';
+                        newButton.innerHTML = '<i class="bi bi-plus-circle"></i> Entregar';
+                        if (sessaoAtiva === 'DEVOLUCAO') {
+                            newButton.disabled = true;
+                        }
+
+                        newButton.dataset.bsToggle = 'modal';
+                        newButton.dataset.bsTarget = '#entregaModal';
+                        newButton.dataset.livroId = livroId;
+                        newButton.dataset.livroTitulo = livroTitulo;
+                        newButton.dataset.alunoId = alunoId;
+                        newButton.dataset.alunoNome = alunoNome;
+
+                        cell.innerHTML = '';
+                        cell.appendChild(newButton);
                     }
                     
                     handleSuccess(result, false);

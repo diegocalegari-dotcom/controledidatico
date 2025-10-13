@@ -7,16 +7,16 @@ define('DB_NAME', 'controledidatico');
 
 // Tenta criar uma conexão com o banco de dados
 function connect_db() {
-    $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
+    // Habilita exceções para erros do mysqli
+    mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-    // Checa a conexão
-    if ($conn->connect_error) {
-        die("Falha na conexão: " . $conn->connect_error);
+    try {
+        $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
+        $conn->set_charset("utf8mb4");
+        return $conn;
+    } catch (mysqli_sql_exception $e) {
+        // Lança a exceção para ser tratada pelo script que chamou a função
+        throw new mysqli_sql_exception("Falha na conexão com o banco de dados: " . $e->getMessage(), $e->getCode());
     }
-
-    // Garante que o charset é UTF-8
-    $conn->set_charset("utf8mb4");
-
-    return $conn;
 }
 ?>

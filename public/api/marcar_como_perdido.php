@@ -37,8 +37,8 @@ try {
     $livro_id = $result_livro->fetch_assoc()['livro_id'];
     $stmt_get_livro->close();
 
-    // 2. Update loan status to 'Perdido'
-    $stmt_update_emprestimo = $conn->prepare("UPDATE emprestimos SET status = 'Perdido' WHERE id = ?");
+        // 2. Update loan to be marked as lost
+    $stmt_update_emprestimo = $conn->prepare("UPDATE emprestimos SET dado_como_perdido = 1 WHERE id = ?");
     $stmt_update_emprestimo->bind_param("i", $emprestimo_id);
     $stmt_update_emprestimo->execute();
     if ($stmt_update_emprestimo->affected_rows === 0) {

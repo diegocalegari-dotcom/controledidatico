@@ -9,6 +9,7 @@ echo "Iniciando a criação das tabelas...\n";
 
 // SQL para deletar tabelas existentes (para permitir reexecutar o script)
 $sql_drop = "
+SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS emprestimos;
 DROP TABLE IF EXISTS estudantes;
 DROP TABLE IF EXISTS livros;
@@ -16,6 +17,7 @@ DROP TABLE IF EXISTS materias;
 DROP TABLE IF EXISTS turmas;
 DROP TABLE IF EXISTS series;
 DROP TABLE IF EXISTS cursos;
+SET FOREIGN_KEY_CHECKS = 1;
 ";
 
 echo "Removendo tabelas antigas (se existirem)...\n";
@@ -86,7 +88,8 @@ CREATE TABLE emprestimos (
     data_devolucao DATE,
     conservacao_entrega ENUM('ÓTIMO', 'BOM', 'REGULAR', 'RUIM', 'PÉSSIMO') NOT NULL,
     conservacao_devolucao ENUM('ÓTIMO', 'BOM', 'REGULAR', 'RUIM', 'PÉSSIMO'),
-    status ENUM('Emprestado', 'Devolvido', 'Perdido') NOT NULL,
+        status ENUM('Emprestado', 'Devolvido', 'Perdido') NOT NULL,
+    dado_como_perdido TINYINT(1) NOT NULL DEFAULT 0,
     FOREIGN KEY (livro_id) REFERENCES livros(id),
     FOREIGN KEY (estudante_id) REFERENCES estudantes(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

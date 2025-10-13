@@ -10,7 +10,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         // Executa o script de inicialização do banco de dados
         // Captura a saída para exibir ao usuário
         ob_start();
-        include '../scripts/init_db.php';
+                include '../scripts/criar_db.php';
         $output = ob_get_clean();
 
         $mensagem = '<div class="alert alert-success">Banco de dados resetado com sucesso!</div>';

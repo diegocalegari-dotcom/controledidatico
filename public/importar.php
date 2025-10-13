@@ -3,15 +3,11 @@ require_once '../config/database.php';
 require_once 'components/navbar.php';
 
 $mensagem = '';
+$step = 1;
+$courses_found = [];
+$temp_file_path = '';
 
-/**
- * Busca ou cria um registro em uma tabela e retorna seu ID.
- * @param mysqli $conn Conexão com o banco.
- * @param string $table Tabela para consultar.
- * @param array $conditions Colunas e valores para a cláusula WHERE. Ex: ['nome' => ['value' => 'Curso A', 'type' => 's']]
- * @param array $insert_data Colunas e valores para inserir caso não encontre. Se vazio, usa $conditions.
- * @return int ID do registro.
- */
+// Função get_or_create_id permanece a mesma...
 function get_or_create_id($conn, $table, $conditions, $insert_data = []) {
     $where_clause = [];
     $params = [];
@@ -53,100 +49,148 @@ function get_or_create_id($conn, $table, $conditions, $insert_data = []) {
     }
 }
 
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_FILES['arquivo_csv'])) {
-    $conn = connect_db();
-    $file = $_FILES['arquivo_csv'];
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    // STEP 1: Análise do arquivo CSV
+    if (isset($_FILES['arquivo_csv'])) {
+        $file = $_FILES['arquivo_csv'];
+        if ($file['error'] === UPLOAD_ERR_OK) {
+            $temp_dir = sys_get_temp_dir();
+            $temp_file_name = uniqid('import_', true) . '.csv';
+            $temp_file_path = $temp_dir . DIRECTORY_SEPARATOR . $temp_file_name;
 
-    if ($file['error'] === UPLOAD_ERR_OK) {
-        $csv_path = $file['tmp_name'];
-        $handle = fopen($csv_path, "r");
+            if (move_uploaded_file($file['tmp_name'], $temp_file_path)) {
+                $handle = fopen($temp_file_path, "r");
+                if ($handle !== FALSE) {
+                    $courses = [];
+                    while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
+                        $data = array_map(function($cell) {
+                            return mb_convert_encoding($cell, 'UTF-8', 'ISO-8859-1');
+                        }, $data);
 
-        if ($handle !== FALSE) {
-            $conn->begin_transaction();
-            try {
-                $current_curso_id = null;
-                $current_serie_id = null;
-                $ano_letivo = date('Y');
-                $stats = ['alunos_add' => 0, 'alunos_update' => 0];
-
-                while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
-                    // Converte cada célula para UTF-8
-                    $data = array_map(function($cell) {
-                        return mb_convert_encoding($cell, 'UTF-8', 'ISO-8859-1');
-                    }, $data);
-
-                    $is_header_row = false;
-                    foreach ($data as $cell) {
-                        if (strpos($cell, 'Curso:') !== false) {
-                            $is_header_row = true;
-                            break;
+                        foreach ($data as $cell) {
+                            if (preg_match('/Curso: (.*)/', $cell, $matches)) {
+                                $course_name = trim($matches[1]);
+                                if (!in_array($course_name, $courses)) {
+                                    $courses[] = $course_name;
+                                }
+                            }
                         }
                     }
-
-                    if ($is_header_row) {
-                        $curso_nome = '';
-                        $serie_nome = '';
-                        $turma_nome = '';
-                        $turno = '';
-
-                        foreach($data as $cell) {
-                            if (preg_match('/Curso: (.*)/', $cell, $curso_matches)) $curso_nome = trim($curso_matches[1]);
-                            if (preg_match('/Seriação: (.*)/', $cell, $serie_matches)) $serie_nome = trim($serie_matches[1]);
-                            if (preg_match('/Turma: (.*)/', $cell, $turma_matches)) $turma_nome = trim($turma_matches[1]);
-                            if (preg_match('/Turno: (.*)/', $cell, $turno_matches)) $turno = trim($turno_matches[1]);
-                        }
-
-                        if (!empty($curso_nome) && !empty($serie_nome) && !empty($turma_nome)) {
-                            $current_curso_id = get_or_create_id($conn, 'cursos', ['nome' => ['value' => $curso_nome, 'type' => 's']]);
-                            $current_serie_id = get_or_create_id($conn, 'series', ['nome' => ['value' => $serie_nome, 'type' => 's'], 'curso_id' => ['value' => $current_curso_id, 'type' => 'i']]);
-                            
-                            $current_turma_id = get_or_create_id($conn, 'turmas', 
-                                ['nome' => ['value' => $turma_nome, 'type' => 's'], 'serie_id' => ['value' => $current_serie_id, 'type' => 'i'], 'ano_letivo' => ['value' => $ano_letivo, 'type' => 'i'], 'turno' => ['value' => $turno, 'type' => 's']]
-                            );
-                        }
-                        continue; // Pula para a próxima linha após processar o cabeçalho
-                    }
-
-                    $cgm = $data[3] ?? '';
-                    if (is_numeric($cgm) && strlen($cgm) > 5) {
-                        $nome_aluno = trim($data[4] ?? '');
-                        $situacao = trim($data[12] ?? 'Matriculado');
-
-                        $stmt = $conn->prepare("SELECT id FROM estudantes WHERE cgm = ?");
-                        $stmt->bind_param("s", $cgm);
-                        $stmt->execute();
-                        $result = $stmt->get_result();
-
-                        if ($result->num_rows > 0) {
-                            $row = $result->fetch_assoc();
-                            $estudante_id = $row['id'];
-                            $stmt_update = $conn->prepare("UPDATE estudantes SET nome = ?, situacao = ?, turma_id = ? WHERE id = ?");
-                            $stmt_update->bind_param("ssii", $nome_aluno, $situacao, $current_turma_id, $estudante_id);
-                            $stmt_update->execute();
-                            $stats['alunos_update']++;
-                        } else {
-                            $stmt_insert = $conn->prepare("INSERT INTO estudantes (cgm, nome, situacao, turma_id) VALUES (?, ?, ?, ?)");
-                            $stmt_insert->bind_param("sssi", $cgm, $nome_aluno, $situacao, $current_turma_id);
-                            $stmt_insert->execute();
-                            $stats['alunos_add']++;
-                        }
-                    }
+                    fclose($handle);
+                    $courses_found = $courses;
+                    $step = 2;
+                } else {
+                    $mensagem = '<div class="alert alert-danger">Não foi possível abrir o arquivo temporário.</div>';
                 }
-                fclose($handle);
-                $conn->commit();
-                $mensagem = sprintf('<div class="alert alert-success">Importação concluída! %d alunos adicionados e %d alunos atualizados.</div>', $stats['alunos_add'], $stats['alunos_update']);
-
-            } catch (Exception $e) {
-                $conn->rollback();
-                $mensagem = '<div class="alert alert-danger">Erro na transação: ' . $e->getMessage() . '</div>';
+            } else {
+                $mensagem = '<div class="alert alert-danger">Erro ao mover o arquivo para o diretório temporário.</div>';
             }
         } else {
-            $mensagem = '<div class="alert alert-danger">Não foi possível abrir o arquivo CSV.</div>';
+            $mensagem = '<div class="alert alert-danger">Erro no upload do arquivo.</div>';
         }
-    } else {
-        $mensagem = '<div class="alert alert-danger">Erro no upload do arquivo.</div>';
     }
-    $conn->close();
+    // STEP 2: Importação dos cursos selecionados
+    elseif (isset($_POST['courses_to_import']) && isset($_POST['temp_file'])) {
+        $conn = connect_db();
+        $courses_to_import = $_POST['courses_to_import'];
+        $temp_file_path = $_POST['temp_file'];
+
+        if (file_exists($temp_file_path)) {
+            $handle = fopen($temp_file_path, "r");
+            if ($handle !== FALSE) {
+                $conn->begin_transaction();
+                try {
+                    $current_curso_id = null;
+                    $current_serie_id = null;
+                    $ano_letivo = date('Y');
+                    $stats = ['alunos_add' => 0, 'alunos_update' => 0];
+                    $should_import_section = false;
+
+                    while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
+                        $data = array_map(function($cell) {
+                            return mb_convert_encoding($cell, 'UTF-8', 'ISO-8859-1');
+                        }, $data);
+
+                        $is_header_row = false;
+                        $curso_nome = '';
+                        foreach ($data as $cell) {
+                            if (preg_match('/Curso: (.*)/', $cell, $curso_matches)) {
+                                $is_header_row = true;
+                                $curso_nome = trim($curso_matches[1]);
+                                break;
+                            }
+                        }
+
+                        if ($is_header_row) {
+                            if (in_array($curso_nome, $courses_to_import)) {
+                                $should_import_section = true;
+                                $serie_nome = '';
+                                $turma_nome = '';
+                                $turno = '';
+
+                                foreach($data as $cell) {
+                                    if (preg_match('/Seriação: (.*)/', $cell, $serie_matches)) $serie_nome = trim($serie_matches[1]);
+                                    if (preg_match('/Turma: (.*)/', $cell, $turma_matches)) $turma_nome = trim($turma_matches[1]);
+                                    if (preg_match('/Turno: (.*)/', $cell, $turno_matches)) $turno = trim($turno_matches[1]);
+                                }
+
+                                if (!empty($curso_nome) && !empty($serie_nome) && !empty($turma_nome)) {
+                                    $current_curso_id = get_or_create_id($conn, 'cursos', ['nome' => ['value' => $curso_nome, 'type' => 's']]);
+                                    $current_serie_id = get_or_create_id($conn, 'series', ['nome' => ['value' => $serie_nome, 'type' => 's'], 'curso_id' => ['value' => $current_curso_id, 'type' => 'i']]);
+                                    $current_turma_id = get_or_create_id($conn, 'turmas', 
+                                        ['nome' => ['value' => $turma_nome, 'type' => 's'], 'serie_id' => ['value' => $current_serie_id, 'type' => 'i'], 'ano_letivo' => ['value' => $ano_letivo, 'type' => 'i'], 'turno' => ['value' => $turno, 'type' => 's']]
+                                    );
+                                }
+                            } else {
+                                $should_import_section = false;
+                            }
+                            continue;
+                        }
+
+                        if ($should_import_section) {
+                            $cgm = $data[3] ?? '';
+                            if (is_numeric($cgm) && strlen($cgm) > 5) {
+                                $nome_aluno = trim($data[4] ?? '');
+                                $situacao = trim($data[12] ?? 'Matriculado');
+
+                                $stmt = $conn->prepare("SELECT id FROM estudantes WHERE cgm = ?");
+                                $stmt->bind_param("s", $cgm);
+                                $stmt->execute();
+                                $result = $stmt->get_result();
+
+                                if ($result->num_rows > 0) {
+                                    $row = $result->fetch_assoc();
+                                    $estudante_id = $row['id'];
+                                    $stmt_update = $conn->prepare("UPDATE estudantes SET nome = ?, situacao = ?, turma_id = ? WHERE id = ?");
+                                    $stmt_update->bind_param("ssii", $nome_aluno, $situacao, $current_turma_id, $estudante_id);
+                                    $stmt_update->execute();
+                                    $stats['alunos_update']++;
+                                } else {
+                                    $stmt_insert = $conn->prepare("INSERT INTO estudantes (cgm, nome, situacao, turma_id) VALUES (?, ?, ?, ?)");
+                                    $stmt_insert->bind_param("sssi", $cgm, $nome_aluno, $situacao, $current_turma_id);
+                                    $stmt_insert->execute();
+                                    $stats['alunos_add']++;
+                                }
+                            }
+                        }
+                    }
+                    fclose($handle);
+                    $conn->commit();
+                    $mensagem = sprintf('<div class="alert alert-success">Importação concluída! %d alunos adicionados e %d alunos atualizados.</div>', $stats['alunos_add'], $stats['alunos_update']);
+                    unlink($temp_file_path); // Apaga o arquivo temporário
+
+                } catch (Exception $e) {
+                    $conn->rollback();
+                    $mensagem = '<div class="alert alert-danger">Erro na transação: ' . $e->getMessage() . '</div>';
+                }
+                $conn->close();
+            } else {
+                 $mensagem = '<div class="alert alert-danger">Arquivo temporário não encontrado ou ilegível.</div>';
+            }
+        } else {
+            $mensagem = '<div class="alert alert-danger">Arquivo temporário expirou ou não foi encontrado. Por favor, envie o arquivo novamente.</div>';
+        }
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -157,69 +201,64 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_FILES['arquivo_csv'])) {
     <title>Importar Alunos</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <link rel="stylesheet" href="css/style.css">
-    <style>
-        .alert .alert-heading i, .alert .step-heading i {
-            font-size: 1.5rem; /* Aumenta o tamanho do ícone */
-            margin-right: 10px; /* Adiciona espaço à direita */
-            vertical-align: middle; /* Alinha o ícone com o texto */
-        }
-        .alert .step-heading {
-            display: flex;
-            align-items: center;
-        }
-    </style>
 </head>
 <body>
     <?php render_navbar(basename($_SERVER['PHP_SELF'])); ?>
 
     <div class="container mt-4">
-        <!-- Caixa de Instruções -->
-        <div class="alert alert-info" role="alert">
-            <h4 class="alert-heading"><i class="bi bi-info-circle-fill"></i> Como Importar Corretamente</h4>
-            <p>Siga os passos abaixo para garantir uma importação de dados bem-sucedida.</p>
+                <div class="alert alert-info" role="alert">
+            <h4 class="alert-heading"><i class="bi bi-info-circle-fill"></i> Como Funciona a Importação</h4>
+            <p>A importação agora é feita em duas etapas para garantir que apenas os dados relevantes sejam adicionados ao sistema.</p>
             <hr>
-            <div class="row">
-                <div class="col-md-6">
-                    <h5 class="step-heading"><i class="bi bi-1-circle"></i> Passo 1: Importação Inicial</h5>
-                    <p>Primeiro, importe a relação de alunos matriculados por turma (manhã e/ou tarde). O sistema irá adicionar os novos cursos, séries e turmas automaticamente.</p>
-                    <ol>
-                        <li>Exporte a relação de alunos do sistema de gestão acadêmica em formato <strong>.xls</strong>.</li>
-                        <li>Abra o arquivo e salve-o como <strong>CSV (separado por vírgulas)</strong>.</li>
-                        <li>Use o formulário abaixo para importar este arquivo <strong>.csv</strong>.</li>
-                    </ol>
-                </div>
-                <div class="col-md-6">
-                    <h5 class="step-heading"><i class="bi bi-2-circle"></i> Passo 2: Limpeza e Importação Final</h5>
-                    <p>Após a primeira importação, alguns cursos e séries que não utilizam livros didáticos (como CELEM, PMA, etc.) podem ter sido criados. É importante arquivá-los.</p>
-                    <ol>
-                        <li>Vá para <a href="gerenciar_cursos.php" class="alert-link">Gerenciar Cursos</a> e <a href="gerenciar_series.php" class="alert-link">Gerenciar Séries</a> para arquivar os itens que não são relevantes.</li>
-                        <li><strong>Importe o mesmo arquivo .csv novamente.</strong></li>
-                        <li>Isso irá atualizar o cadastro dos estudantes, garantindo que eles sejam associados apenas às turmas e cursos corretos que utilizam o livro didático.</li>
-                    </ol>
-                </div>
-            </div>
+            <p><strong>Passo 1: Análise do Arquivo</strong><br>
+            Envie o arquivo CSV exportado do sistema de gestão acadêmica. O sistema irá ler o arquivo e identificar todos os cursos contidos nele, sem salvar nenhuma informação no banco de dados.</p>
+            <p><strong>Passo 2: Seleção e Importação</strong><br>
+            Na tela seguinte, você verá uma lista de todos os cursos encontrados. Desmarque os cursos que não utilizam livros didáticos (como CELEM, PMA, etc.). Ao confirmar, apenas os alunos, turmas e séries dos cursos selecionados serão importados ou atualizados no sistema.</p>
             <hr>
-            <p class="mb-0"><strong>Atenção:</strong> Este processo de duas etapas é crucial para evitar que estudantes de cursos complementares apareçam nas listas de entrega de livros.</p>
+            <p class="mb-0">Este novo processo substitui a necessidade de importar o mesmo arquivo duas vezes e garante um controle muito maior sobre os dados.</p>
         </div>
-        <!-- Fim da Caixa de Instruções -->
 
-        <h2>Importar Alunos, Cursos, Séries e Turmas</h2>
-        <p>Selecione o arquivo CSV de matrículas (como manha.csv ou tarde.csv) para popular o banco de dados automaticamente.</p>
+        <h2 class="mt-4">Iniciar Nova Importação</h2>
         
         <?php echo $mensagem; ?>
 
-        <div class="card">
-            <div class="card-body">
-                <form action="importar.php" method="POST" enctype="multipart/form-data">
-                    <div class="mb-3">
-                        <label for="arquivo_csv" class="form-label">Arquivo .csv</label>
-                        <input class="form-control" type="file" id="arquivo_csv" name="arquivo_csv" accept=".csv" required>
-                    </div>
-                    <button type="submit" class="btn btn-primary">Importar</button>
-                </form>
+        <?php if ($step == 1): ?>
+            <div class="card">
+                <div class="card-header"><strong>Passo 1: Enviar e Analisar Arquivo</strong></div>
+                <div class="card-body">
+                    <form action="importar.php" method="POST" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="arquivo_csv" class="form-label">Selecione o arquivo CSV de matrículas (ex: manha.csv)</label>
+                            <input class="form-control" type="file" id="arquivo_csv" name="arquivo_csv" accept=".csv" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Analisar Arquivo</button>
+                    </form>
+                </div>
             </div>
-        </div>
+        <?php elseif ($step == 2 && !empty($courses_found)): ?>
+            <div class="card">
+                <div class="card-header"><strong>Passo 2: Selecionar Cursos para Importar</strong></div>
+                <div class="card-body">
+                    <form action="importar.php" method="POST">
+                        <input type="hidden" name="temp_file" value="<?php echo htmlspecialchars($temp_file_path); ?>">
+                        <p>Selecione os cursos que você deseja importar. As séries, turmas e alunos associados a esses cursos serão criados ou atualizados.</p>
+                        <div class="mb-3">
+                            <?php foreach ($courses_found as $course): ?>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="courses_to_import[]" value="<?php echo htmlspecialchars($course); ?>" id="course_<?php echo md5($course); ?>" checked>
+                                    <label class="form-check-label" for="course_<?php echo md5($course); ?>">
+                                        <?php echo htmlspecialchars($course); ?>
+                                    </label>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <button type="submit" class="btn btn-success">Importar Cursos Selecionados</button>
+                        <a href="importar.php" class="btn btn-secondary">Cancelar</a>
+                    </form>
+                </div>
+            </div>
+        <?php endif; ?>
+
     </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

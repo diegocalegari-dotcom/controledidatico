@@ -113,7 +113,8 @@ CREATE TABLE emprestimos (
     data_devolucao DATE,
     conservacao_entrega ENUM('ÓTIMO', 'BOM', 'REGULAR', 'RUIM', 'PÉSSIMO') NOT NULL,
     conservacao_devolucao ENUM('ÓTIMO', 'BOM', 'REGULAR', 'RUIM', 'PÉSSIMO'),
-    status ENUM('Emprestado', 'Devolvido', 'Perdido') NOT NULL,
+        status ENUM('Emprestado', 'Devolvido', 'Perdido') NOT NULL,
+    dado_como_perdido TINYINT(1) NOT NULL DEFAULT 0,
     FOREIGN KEY (livro_id) REFERENCES livros(id),
     FOREIGN KEY (estudante_id) REFERENCES estudantes(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
