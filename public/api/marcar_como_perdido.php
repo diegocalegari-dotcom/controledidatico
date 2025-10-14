@@ -10,15 +10,22 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $data = json_decode(file_get_contents('php://input'), true);
+
+// Get data from payload
 $emprestimo_id = $data['emprestimo_id'] ?? 0;
+$realizar_reposicao = $data['realizar_reposicao'] ?? false;
 $conservacao_reposicao = $data['conservacao_reposicao'] ?? null;
-$ano_letivo = date('Y'); // Assume current year for the reserve
+$ano_letivo = date('Y');
 
-$valid_conservacao = ['ÓTIMO', 'BOM', 'REGULAR', 'RUIM', 'PÉSSIMO'];
-
-if (empty($emprestimo_id) || empty($conservacao_reposicao) || !in_array($conservacao_reposicao, $valid_conservacao)) {
+// Validation
+if (empty($emprestimo_id)) {
     http_response_code(400);
-    echo json_encode(['success' => false, 'message' => 'Dados incompletos ou inválidos para marcar como perdido.']);
+    echo json_encode(['success' => false, 'message' => 'ID do empréstimo não fornecido.']);
+    exit;
+}
+if ($realizar_reposicao && empty($conservacao_reposicao)) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'message' => 'Estado de conservação da reposição não fornecido.']);
     exit;
 }
 
@@ -26,61 +33,81 @@ $conn = connect_db();
 $conn->begin_transaction();
 
 try {
-    // 1. Get full loan details
-    $stmt_get_loan = $conn->prepare("SELECT estudante_id, livro_id, conservacao_entrega FROM emprestimos WHERE id = ?");
+    // 1. Get original loan details
+    $stmt_get_loan = $conn->prepare("SELECT estudante_id, livro_id, ano_letivo FROM emprestimos WHERE id = ?");
     $stmt_get_loan->bind_param("i", $emprestimo_id);
     $stmt_get_loan->execute();
     $result_loan = $stmt_get_loan->get_result();
     if ($result_loan->num_rows === 0) {
-        throw new Exception('Empréstimo não encontrado.');
+        throw new Exception('Empréstimo original não encontrado.');
     }
     $loan = $result_loan->fetch_assoc();
     $stmt_get_loan->close();
 
     $aluno_id = $loan['estudante_id'];
     $livro_id = $loan['livro_id'];
-    $conservacao_entrega = $loan['conservacao_entrega'];
+    $ano_letivo_original = $loan['ano_letivo'];
 
-    // 2. Update loan to be marked as lost
-    $stmt_update_emprestimo = $conn->prepare("UPDATE emprestimos SET dado_como_perdido = 1 WHERE id = ?");
-    $stmt_update_emprestimo->bind_param("i", $emprestimo_id);
-    $stmt_update_emprestimo->execute();
-    if ($stmt_update_emprestimo->affected_rows === 0) {
-        // If the flag is already 1, this is not a failure. We proceed.
-        // throw new Exception('Não foi possível atualizar o status do empréstimo.');
+    // 2. Update old loan status to 'Perdido'
+    $stmt_update_old_loan = $conn->prepare("UPDATE emprestimos SET status = 'Perdido', dado_como_perdido = 1 WHERE id = ?");
+    $stmt_update_old_loan->bind_param("i", $emprestimo_id);
+    $stmt_update_old_loan->execute();
+    $stmt_update_old_loan->close();
+
+    $response_data = [];
+
+    if ($realizar_reposicao) {
+        // SCENARIO 1: Replace the book
+
+        // 3a. Decrement the technical reserve
+        $stmt_decrement_reserve = $conn->prepare(
+            "UPDATE reserva_tecnica SET quantidade = GREATEST(0, quantidade - 1)
+             WHERE livro_id = ? AND conservacao = ? AND ano_letivo = ?"
+        );
+        $stmt_decrement_reserve->bind_param("iss", $livro_id, $conservacao_reposicao, $ano_letivo);
+        $stmt_decrement_reserve->execute();
+        $stmt_decrement_reserve->close();
+
+        // 3b. Create a new loan for the replacement book
+        $stmt_new_loan = $conn->prepare(
+            "INSERT INTO emprestimos (livro_id, estudante_id, ano_letivo, data_entrega, conservacao_entrega, status) 
+             VALUES (?, ?, ?, CURDATE(), ?, 'Emprestado')"
+        );
+        $stmt_new_loan->bind_param("iiss", $livro_id, $aluno_id, $ano_letivo_original, $conservacao_reposicao);
+        $stmt_new_loan->execute();
+        $new_emprestimo_id = $conn->insert_id;
+        $stmt_new_loan->close();
+
+        $response_data = [
+            'replacement_loan' => [
+                'emprestimo_id' => $new_emprestimo_id,
+                'aluno_id' => $aluno_id,
+                'livro_id' => $livro_id,
+                'conservacao_entrega' => $conservacao_reposicao,
+                'status' => 'Emprestado'
+            ],
+            'lost_loan_id' => $emprestimo_id
+        ];
+        $message = 'Livro marcado como perdido e reposição registrada com sucesso!';
+
+    } else {
+        // SCENARIO 2: Do not replace the book
+        $response_data = [
+            'lost_loan' => [
+                'emprestimo_id' => $emprestimo_id,
+                'aluno_id' => $aluno_id,
+                'livro_id' => $livro_id,
+                'status' => 'Perdido'
+            ]
+        ];
+        $message = 'Livro marcado como perdido com sucesso (sem reposição).';
     }
-    $stmt_update_emprestimo->close();
 
-    // 3. Decrement the technical reserve for the specified conservation status
-    // First, ensure the reserve entry exists
-    $stmt_ensure_reserve = $conn->prepare(
-        "INSERT INTO reserva_tecnica (livro_id, conservacao, ano_letivo, quantidade) VALUES (?, ?, ?, 0)
-         ON DUPLICATE KEY UPDATE quantidade = quantidade"
-    );
-    $stmt_ensure_reserve->bind_param("iss", $livro_id, $conservacao_reposicao, $ano_letivo);
-    $stmt_ensure_reserve->execute();
-    $stmt_ensure_reserve->close();
-
-    // Then, decrement
-    $stmt_decrement_reserve = $conn->prepare(
-        "UPDATE reserva_tecnica SET quantidade = GREATEST(0, quantidade - 1)
-         WHERE livro_id = ? AND conservacao = ? AND ano_letivo = ?"
-    );
-    $stmt_decrement_reserve->bind_param("iss", $livro_id, $conservacao_reposicao, $ano_letivo);
-    $stmt_decrement_reserve->execute();
-    $stmt_decrement_reserve->close();
-
-    // If all queries were successful, commit the transaction
     $conn->commit();
     echo json_encode([
         'success' => true, 
-        'message' => 'Livro marcado como perdido e reserva atualizada!',
-        'marcado_como_perdido' => [
-            'emprestimo_id' => $emprestimo_id,
-            'aluno_id' => $aluno_id,
-            'livro_id' => $livro_id,
-            'conservacao_entrega' => $conservacao_entrega
-        ]
+        'message' => $message,
+        'data' => $response_data
     ]);
 
 } catch (Exception $e) {

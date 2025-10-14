@@ -267,10 +267,16 @@ function get_conservacao_class($conservacao) {
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p>Selecione o estado de conservação do livro que será retirado da reserva técnica para reposição.</p>
                     <input type="hidden" id="modal-perda-emprestimo-id">
-                    <div class="mb-3">
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="realizar_reposicao" checked>
+                        <label class="form-check-label" for="realizar_reposicao">
+                            Repor este livro da reserva técnica?
+                        </label>
+                    </div>
+                    <div class="mb-3" id="reposicao_conservacao_div">
                         <label for="conservacao_reposicao" class="form-label">Estado de Conservação da Reposição</label>
+                        <p class="form-text text-muted mt-0" style="font-size: 0.875em;">Selecione o estado do livro que será retirado da reserva para substituir o perdido.</p>
                         <select class="form-select" id="conservacao_reposicao">
                             <option>ÓTIMO</option>
                             <option selected>BOM</option>
@@ -402,6 +408,17 @@ function get_conservacao_class($conservacao) {
         const entregaModal = new bootstrap.Modal(entregaModalEl);
         const devolucaoModal = new bootstrap.Modal(devolucaoModalEl);
         const perdaModal = new bootstrap.Modal(perdaModalEl);
+
+        const reposicaoCheckbox = document.getElementById('realizar_reposicao');
+        const reposicaoConservacaoDiv = document.getElementById('reposicao_conservacao_div');
+
+        reposicaoCheckbox.addEventListener('change', function() {
+            reposicaoConservacaoDiv.style.display = this.checked ? 'block' : 'none';
+        });
+
+        perdaModalEl.addEventListener('shown.bs.modal', function () {
+            reposicaoConservacaoDiv.style.display = reposicaoCheckbox.checked ? 'block' : 'none';
+        });
         const gerenciarAlunoModal = new bootstrap.Modal(document.getElementById('gerenciarAlunoModal'));
         const adicionarAlunoModal = new bootstrap.Modal(document.getElementById('adicionarAlunoModal'));
 
@@ -810,37 +827,77 @@ function get_conservacao_class($conservacao) {
             .catch(handleError);
         });
 
-        document.getElementById('btn-confirmar-perda').addEventListener('click', function() {
+                document.getElementById('btn-confirmar-perda').addEventListener('click', function() {
             const emprestimoId = document.getElementById('modal-emprestimo-id').value;
+            const realizarReposicao = document.getElementById('realizar_reposicao').checked;
             const conservacaoReposicao = document.getElementById('conservacao_reposicao').value;
-            if (!confirm('Tem certeza que deseja marcar este livro como PERDIDO?')) return;
+            
+            let confirmMessage = 'Tem certeza que deseja marcar este livro como PERDIDO?';
+            if (realizarReposicao) {
+                confirmMessage += `\n\nUm livro em estado '${conservacaoReposicao}' será retirado da reserva para REPOSIÇÃO.`;
+            } else {
+                confirmMessage += '\n\nNENHUM livro será retirado da reserva. O empréstimo será encerrado como perdido.';
+            }
+            if (!confirm(confirmMessage)) return;
+
+            const payload = { 
+                emprestimo_id: emprestimoId, 
+                realizar_reposicao: realizarReposicao,
+                conservacao_reposicao: realizarReposicao ? conservacaoReposicao : null
+            };
 
             fetch('api/marcar_como_perdido.php', { 
                 method: 'POST', 
                 headers: {'Content-Type': 'application/json'}, 
-                body: JSON.stringify({ emprestimo_id: emprestimoId, conservacao_reposicao: conservacaoReposicao }) 
+                body: JSON.stringify(payload) 
             })
             .then(handleResponse)
             .then(result => {
-                if (result.success && result.marcado_como_perdido) {
-                    const loan = result.marcado_como_perdido;
-                    const alunoId = loan.aluno_id;
-                    const livroId = loan.livro_id;
+                if (result.success && result.data) {
+                    const data = result.data;
+                    let alunoId, livroId;
+
+                    if (data.replacement_loan) {
+                        // SCENARIO 1: Replaced
+                        alunoId = data.replacement_loan.aluno_id;
+                        livroId = data.replacement_loan.livro_id;
+                    } else if (data.lost_loan) {
+                        // SCENARIO 2: Not replaced
+                        alunoId = data.lost_loan.aluno_id;
+                        livroId = data.lost_loan.livro_id;
+                    }
 
                     const alunoRow = document.querySelector(`tr[data-aluno-id="${alunoId}"]`);
                     const cell = alunoRow ? alunoRow.querySelector(`td[data-livro-id="${livroId}"]`) : null;
 
                     if (cell) {
-                        const badge = cell.querySelector('.btn-devolver');
-                        if (badge) {
-                            // The badge already exists, we just need to add the warning icon.
-                            const icon = document.createElement('i');
-                            icon.className = 'bi bi-exclamation-triangle-fill text-warning me-1';
-                            icon.title = 'Este livro foi marcado como perdido';
-                            badge.prepend(icon);
+                        if (data.replacement_loan) {
+                            // Rebuild the 'ENTREGUE' badge for the new loan
+                            const loan = data.replacement_loan;
+                            const alunoNome = alunoRow.querySelector('td:nth-child(2)').textContent;
+                            const livroTitulo = document.getElementById('modal-devolucao-livro-titulo').textContent; // Get title from the still-open modal
+
+                            const newBadge = document.createElement('a');
+                            newBadge.href = '#';
+                            newBadge.className = `badge ${getConservacaoClass(loan.conservacao_entrega)} text-decoration-none btn-devolver`;
+                            newBadge.innerHTML = `<i class="bi bi-check-circle-fill"></i> ENTREGUE (${loan.conservacao_entrega})`;
+                            newBadge.dataset.bsToggle = 'modal';
+                            newBadge.dataset.bsTarget = '#devolucaoModal';
+                            newBadge.dataset.emprestimoId = loan.emprestimo_id;
+                            newBadge.dataset.alunoId = loan.aluno_id;
+                            newBadge.dataset.livroId = loan.livro_id;
+                            newBadge.dataset.alunoNome = alunoNome;
+                            newBadge.dataset.livroTitulo = livroTitulo;
+                            newBadge.dataset.conservacaoEntrega = loan.conservacao_entrega;
+                            cell.innerHTML = '';
+                            cell.appendChild(newBadge);
+
+                        } else if (data.lost_loan) {
+                            // Just show a 'Perdido' badge
+                            cell.innerHTML = '<span class="badge bg-danger">PERDIDO</span>';
                         }
                     }
-                    
+
                     // Hide all modals
                     const perdaModalEl = document.getElementById('perdaModal');
                     const devolucaoModalEl = document.getElementById('devolucaoModal');
@@ -848,8 +905,9 @@ function get_conservacao_class($conservacao) {
                     const devolucaoModalInstance = bootstrap.Modal.getInstance(devolucaoModalEl);
                     if (perdaModalInstance) perdaModalInstance.hide();
                     if (devolucaoModalInstance) devolucaoModalInstance.hide();
-
+                    
                     handleSuccess(result, false); // false = no reload
+
                 } else {
                     handleError(new Error(result.message || 'Não foi possível marcar como perdido.'));
                 }
