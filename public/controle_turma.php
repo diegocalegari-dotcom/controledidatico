@@ -193,6 +193,9 @@ function get_conservacao_class($conservacao) {
                                                 $classe_cor = get_conservacao_class($conservacao_devolucao);
                                                 echo '<a class="badge ' . $classe_cor . ' text-decoration-none btn-reverter-devolucao" title="Reverter Devolução" data-emprestimo-id="' . $emprestimo['emprestimo_id'] . '" data-aluno-nome="' . htmlspecialchars($aluno['nome']) . '" data-livro-titulo="' . htmlspecialchars($livro['titulo']) . '" data-revert-conservacao="' . $emprestimo['conservacao'] . '"><i class="bi bi-arrow-counterclockwise"></i> DEVOLVIDO (' . $conservacao_devolucao . ')</a>';
                                                 break;
+                                            case 'Perdido':
+                                                echo '<a href="#" class="badge bg-danger text-decoration-none btn-reverter-perda" title="Reverter Status de Perda" data-emprestimo-id="' . $emprestimo['emprestimo_id'] . '"><i class="bi bi-arrow-counterclockwise"></i> PERDIDO</a>';
+                                                break;
                                         }
                                     } else {
                                         $disabled = $sessao_ativa == 'DEVOLUCAO' ? 'disabled' : '';
@@ -576,6 +579,52 @@ function get_conservacao_class($conservacao) {
                 })
                 .catch(handleError);
             } 
+            else if (target.classList.contains('btn-reverter-perda')) {
+                const emprestimoId = target.dataset.emprestimoId;
+                if (!confirm('Deseja reverter o status de PERDIDO para este livro? O status voltará a ser \'Emprestado\'.')) return;
+
+                fetch('api/reverter_perda.php', { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({ emprestimo_id: emprestimoId }) 
+                })
+                .then(handleResponse)
+                .then(result => {
+                    if (result.success && result.reverted_loan) {
+                        const loan = result.reverted_loan;
+                        const alunoRow = document.querySelector(`tr[data-aluno-id="${loan.aluno_id}"]`);
+                        const cell = alunoRow ? alunoRow.querySelector(`td[data-livro-id="${loan.livro_id}"]`) : null;
+
+                        if (cell) {
+                            const conservacao = loan.conservacao_entrega;
+                            const alunoNome = alunoRow.querySelector('td:nth-child(2)').textContent;
+                            const ths = Array.from(document.querySelectorAll('thead th'));
+                            const cellIndex = cell.cellIndex;
+                            const livroTitulo = ths[cellIndex] ? ths[cellIndex].title : '';
+
+                            const newBadge = document.createElement('a');
+                            newBadge.href = '#';
+                            newBadge.className = `badge ${getConservacaoClass(conservacao)} text-decoration-none btn-devolver`;
+                            newBadge.innerHTML = `<i class="bi bi-check-circle-fill"></i> ENTREGUE (${conservacao})`;
+                            newBadge.dataset.bsToggle = 'modal';
+                            newBadge.dataset.bsTarget = '#devolucaoModal';
+                            newBadge.dataset.emprestimoId = loan.emprestimo_id;
+                            newBadge.dataset.alunoId = loan.aluno_id;
+                            newBadge.dataset.livroId = loan.livro_id;
+                            newBadge.dataset.alunoNome = alunoNome;
+                            newBadge.dataset.livroTitulo = livroTitulo;
+                            newBadge.dataset.conservacaoEntrega = conservacao;
+
+                            cell.innerHTML = '';
+                            cell.appendChild(newBadge);
+                        }
+                        handleSuccess(result, false);
+                    } else {
+                        handleError(new Error(result.message || 'Não foi possível reverter a perda.'));
+                    }
+                })
+                .catch(handleError);
+            }
             else if (target.classList.contains('btn-gerenciar-aluno')) {
                 const alunoId = target.dataset.alunoId;
                 document.getElementById('modal-gerenciar-aluno-nome').textContent = alunoNome;
