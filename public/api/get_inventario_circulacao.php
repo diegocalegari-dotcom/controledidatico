@@ -29,7 +29,7 @@ $sql = "
     JOIN series s ON t.serie_id = s.id
     WHERE e.ano_letivo = ?
         AND (e.status = 'Emprestado' OR e.status = 'Perdido')
-    GROUP BY s.nome, l.id, l.titulo, e.conservacao_entrega
+    GROUP BY s.nome, l.id, l.titulo, status
     ORDER BY s.nome, l.titulo, status;
 ";
 
