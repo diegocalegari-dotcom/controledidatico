@@ -25,17 +25,43 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             http_response_code(400);
             $response = ['success' => false, 'message' => 'ID do empréstimo não fornecido.'];
         } else {
-            $stmt = $conn->prepare("DELETE FROM emprestimos WHERE id = ?");
-            $stmt->bind_param("i", $emprestimo_id);
-            $stmt->execute();
+            // Primeiro, buscar estudante_id e livro_id
+            $stmt_select = $conn->prepare("SELECT estudante_id, livro_id FROM emprestimos WHERE id = ?");
+            $stmt_select->bind_param("i", $emprestimo_id);
+            $stmt_select->execute();
+            $result = $stmt_select->get_result();
+            $emprestimo_data = $result->fetch_assoc();
+            $stmt_select->close();
 
-            if ($stmt->affected_rows > 0) {
-                $response = ['success' => true, 'message' => 'Entrega cancelada com sucesso!'];
+            if (!$emprestimo_data) {
+                // Empréstimo não encontrado, pode já ter sido cancelado.
+                $response = ['success' => true, 'message' => 'A entrega já havia sido cancelada ou não foi encontrada.'];
             } else {
-                $response = ['success' => true, 'message' => 'A entrega já havia sido cancelada.'];
+                $aluno_id = $emprestimo_data['estudante_id']; // Corrigido para estudante_id
+                $livro_id = $emprestimo_data['livro_id'];
+
+                $stmt_delete = $conn->prepare("DELETE FROM emprestimos WHERE id = ?");
+                $stmt_delete->bind_param("i", $emprestimo_id);
+                $stmt_delete->execute();
+
+                if ($stmt_delete->affected_rows > 0) {
+                    $response = [
+                        'success' => true, 
+                        'message' => 'Entrega cancelada com sucesso!',
+                        'aluno_id' => $aluno_id, // A chave continua aluno_id para o frontend
+                        'livro_id' => $livro_id
+                    ];
+                } else {
+                    // Se a deleção falhar mas o select funcionou, algo está estranho, mas tratamos como já cancelado.
+                    $response = [
+                        'success' => true, 
+                        'message' => 'A entrega já havia sido cancelada.',
+                        'aluno_id' => $aluno_id, // A chave continua aluno_id para o frontend
+                        'livro_id' => $livro_id
+                    ];
+                }
+                $stmt_delete->close();
             }
-            
-            $stmt->close();
             $conn->close();
         }
 

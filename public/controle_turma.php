@@ -486,6 +486,7 @@ function get_conservacao_class($conservacao) {
             }
 
             const target = event.target.closest('button, a');
+            console.log('DEBUG: Click target:', target); // ADD THIS
             if (!target) return;
 
             const alunoRow = target.closest('tr');
@@ -505,8 +506,10 @@ function get_conservacao_class($conservacao) {
                 document.getElementById('modal-devolucao-aluno-nome').textContent = target.dataset.alunoNome;
                 document.getElementById('modal-devolucao-livro-titulo').textContent = target.dataset.livroTitulo;
                 document.getElementById('modal-emprestimo-id').value = target.dataset.emprestimoId;
-                document.getElementById('modal-devolucao-aluno-id').value = target.dataset.alunoId;
-                document.getElementById('modal-devolucao-livro-id').value = target.dataset.livroId;
+                
+                // Store alunoId and livroId directly on the modal object
+                devolucaoModal.alunoId = target.dataset.alunoId;
+                devolucaoModal.livroId = target.dataset.livroId;
                 
                 conservacaoSpan.textContent = conservacaoEntrega;
                 conservacaoSpan.className = 'badge '; // Limpa classes antigas
@@ -687,87 +690,121 @@ function get_conservacao_class($conservacao) {
             const alunoId = document.getElementById('modal-devolucao-aluno-id').value;
             const livroId = document.getElementById('modal-devolucao-livro-id').value;
 
+            document.getElementById('btn-confirmar-devolucao').addEventListener('click', function() {
+            const data = { 
+                emprestimo_id: document.getElementById('modal-emprestimo-id').value, 
+                conservacao: document.getElementById('conservacao_devolucao').value 
+            };
+
             fetch('api/registrar_devolucao.php', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) })
             .then(handleResponse)
             .then(result => {
                 if (result.success && result.devolucao) {
-                    devolucaoModal.hide();
                     const dev = result.devolucao;
+                    const alunoId = dev.aluno_id;
+                    const livroId = dev.livro_id;
+
                     const alunoRow = document.querySelector(`tr[data-aluno-id="${alunoId}"]`);
                     const cell = alunoRow ? alunoRow.querySelector(`td[data-livro-id="${livroId}"]`) : null;
 
                     if (cell) {
-                        // Create the new link element
                         const newBadge = document.createElement('a');
-
-                        // Set its classes and visual text
                         newBadge.className = `badge ${getConservacaoClass(dev.conservacao_devolucao)} text-decoration-none btn-reverter-devolucao`;
                         newBadge.title = 'Reverter Devolução';
                         newBadge.innerHTML = `<i class="bi bi-arrow-counterclockwise"></i> DEVOLVIDO (${dev.conservacao_devolucao})`;
-
-                        // Set all the data attributes
                         newBadge.dataset.emprestimoId = dev.emprestimo_id;
-                        newBadge.dataset.alunoId = alunoId;
-                        newBadge.dataset.livroId = livroId;
                         newBadge.dataset.alunoNome = document.getElementById('modal-devolucao-aluno-nome').textContent;
                         newBadge.dataset.livroTitulo = document.getElementById('modal-devolucao-livro-titulo').textContent;
-                        newBadge.dataset.revertConservacao = document.getElementById('modal-devolucao-conservacao-entrega').textContent;
-
-                        // Clear the cell and append the new, correctly-built element
+                        
                         cell.innerHTML = '';
                         cell.appendChild(newBadge);
                     }
-                    handleSuccess(result, false); // No reload
+                    
+                    const devolucaoModalEl = document.getElementById('devolucaoModal');
+                    const modalInstance = bootstrap.Modal.getInstance(devolucaoModalEl);
+                    if (modalInstance) {
+                        modalInstance.hide();
+                    }
+                    handleSuccess(result, false);
                 } else {
-                    devolucaoModal.hide();
+                    const devolucaoModalEl = document.getElementById('devolucaoModal');
+                    const modalInstance = bootstrap.Modal.getInstance(devolucaoModalEl);
+                    if (modalInstance) {
+                        modalInstance.hide();
+                    }
                     handleError(new Error(result.message || 'Não foi possível registrar a devolução.'));
                 }
             })
             .catch(handleError);
         });
+        });
+
+        
+            function cancelarEmprestimo(element, emprestimoId) {
+    if (!confirm('Certeza que deseja cancelar este empréstimo?')) {
+        return;
+    }
+    fetch('/controledidatico/public/api/cancelar_emprestimo.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ emprestimo_id: emprestimoId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const statusDiv = document.getElementById('status-' + emprestimoId);
+            const button = statusDiv.querySelector('button');
+            
+            statusDiv.innerHTML = `<button onclick="registrarEmprestimo(this, ${data.aluno_id}, ${data.livro_id})" class="btn btn-warning">Entregar</button>`;
+        } else {
+            alert('Falha ao cancelar empréstimo: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        alert('Erro ao conectar com o servidor.');
+    });
+}
 
         document.getElementById('btn-cancelar-entrega').addEventListener('click', function() {
             const emprestimoId = document.getElementById('modal-emprestimo-id').value;
-            const alunoId = document.getElementById('modal-devolucao-aluno-id').value;
-            const livroId = document.getElementById('modal-devolucao-livro-id').value;
-            const alunoNome = document.getElementById('modal-devolucao-aluno-nome').textContent;
-            const livroTitulo = document.getElementById('modal-devolucao-livro-titulo').textContent;
+            if (!confirm('Certeza que deseja cancelar este empréstimo?')) {
+                return;
+            }
 
-            if (!confirm('Deseja CANCELAR esta entrega? A anotação será removida permanentemente.')) return;
-
-            fetch('api/cancelar_emprestimo.php', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ emprestimo_id: emprestimoId }) })
+            fetch('api/cancelar_emprestimo.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ emprestimo_id: emprestimoId })
+            })
             .then(handleResponse)
             .then(result => {
-                if (result.success) {
-                    devolucaoModal.hide();
+                if (result.success && result.aluno_id && result.livro_id) {
+                    const alunoId = result.aluno_id;
+                    const livroId = result.livro_id;
                     
                     const alunoRow = document.querySelector(`tr[data-aluno-id="${alunoId}"]`);
                     const cell = alunoRow ? alunoRow.querySelector(`td[data-livro-id="${livroId}"]`) : null;
 
                     if (cell) {
-                        const sessaoAtiva = document.body.dataset.sessaoAtiva;
-                        const newButton = document.createElement('button');
-                        
-                        newButton.className = 'btn btn-primary btn-sm btn-entregar';
-                        newButton.innerHTML = '<i class="bi bi-plus-circle"></i> Entregar';
-                        if (sessaoAtiva === 'DEVOLUCAO') {
-                            newButton.disabled = true;
-                        }
+                        const alunoNome = alunoRow.querySelector('td:nth-child(2)').textContent;
+                        const ths = Array.from(document.querySelectorAll('thead th'));
+                        const cellIndex = cell.cellIndex;
+                        const livroTitulo = ths[cellIndex] ? ths[cellIndex].title : '';
 
-                        newButton.dataset.bsToggle = 'modal';
-                        newButton.dataset.bsTarget = '#entregaModal';
-                        newButton.dataset.livroId = livroId;
-                        newButton.dataset.livroTitulo = livroTitulo;
-                        newButton.dataset.alunoId = alunoId;
-                        newButton.dataset.alunoNome = alunoNome;
-
-                        cell.innerHTML = '';
-                        cell.appendChild(newButton);
+                        cell.innerHTML = `<button class="btn btn-primary btn-sm btn-entregar" data-bs-toggle="modal" data-bs-target="#entregaModal" data-livro-id="${livroId}" data-livro-titulo="${livroTitulo}" data-aluno-id="${alunoId}" data-aluno-nome="${alunoNome}"><i class="bi bi-plus-circle"></i> Entregar</button>`;
                     }
                     
-                    handleSuccess(result, false);
+                    const devolucaoModalEl = document.getElementById('devolucaoModal');
+                    const modalInstance = bootstrap.Modal.getInstance(devolucaoModalEl);
+                    if (modalInstance) {
+                        modalInstance.hide();
+                    }
+                    handleSuccess(result);
                 } else {
-                    handleError(new Error(result.message || 'Não foi possível cancelar a entrega.'));
+                    handleError(new Error(result.message || 'Não foi possível cancelar. Resposta da API inválida.'));
                 }
             })
             .catch(handleError);
@@ -777,8 +814,47 @@ function get_conservacao_class($conservacao) {
             const emprestimoId = document.getElementById('modal-emprestimo-id').value;
             const conservacaoReposicao = document.getElementById('conservacao_reposicao').value;
             if (!confirm('Tem certeza que deseja marcar este livro como PERDIDO?')) return;
-            fetch('api/marcar_como_perdido.php', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ emprestimo_id: emprestimoId, conservacao_reposicao: conservacaoReposicao }) })
-            .then(handleResponse).then(result => handleSuccess(result, true)).catch(handleError);
+
+            fetch('api/marcar_como_perdido.php', { 
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({ emprestimo_id: emprestimoId, conservacao_reposicao: conservacaoReposicao }) 
+            })
+            .then(handleResponse)
+            .then(result => {
+                if (result.success && result.marcado_como_perdido) {
+                    const loan = result.marcado_como_perdido;
+                    const alunoId = loan.aluno_id;
+                    const livroId = loan.livro_id;
+
+                    const alunoRow = document.querySelector(`tr[data-aluno-id="${alunoId}"]`);
+                    const cell = alunoRow ? alunoRow.querySelector(`td[data-livro-id="${livroId}"]`) : null;
+
+                    if (cell) {
+                        const badge = cell.querySelector('.btn-devolver');
+                        if (badge) {
+                            // The badge already exists, we just need to add the warning icon.
+                            const icon = document.createElement('i');
+                            icon.className = 'bi bi-exclamation-triangle-fill text-warning me-1';
+                            icon.title = 'Este livro foi marcado como perdido';
+                            badge.prepend(icon);
+                        }
+                    }
+                    
+                    // Hide all modals
+                    const perdaModalEl = document.getElementById('perdaModal');
+                    const devolucaoModalEl = document.getElementById('devolucaoModal');
+                    const perdaModalInstance = bootstrap.Modal.getInstance(perdaModalEl);
+                    const devolucaoModalInstance = bootstrap.Modal.getInstance(devolucaoModalEl);
+                    if (perdaModalInstance) perdaModalInstance.hide();
+                    if (devolucaoModalInstance) devolucaoModalInstance.hide();
+
+                    handleSuccess(result, false); // false = no reload
+                } else {
+                    handleError(new Error(result.message || 'Não foi possível marcar como perdido.'));
+                }
+            })
+            .catch(handleError);
         });
 
         document.getElementById('btn-salvar-novo-aluno').addEventListener('click', function() {

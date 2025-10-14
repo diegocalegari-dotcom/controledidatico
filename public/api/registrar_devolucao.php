@@ -26,8 +26,8 @@ $conn = connect_db();
 $conn->begin_transaction();
 
 try {
-    // 1. Get loan details to check if it was marked as lost
-    $stmt_get_loan = $conn->prepare("SELECT livro_id, dado_como_perdido FROM emprestimos WHERE id = ?");
+    // 1. Get loan details
+    $stmt_get_loan = $conn->prepare("SELECT estudante_id, livro_id, dado_como_perdido FROM emprestimos WHERE id = ?");
     $stmt_get_loan->bind_param("i", $emprestimo_id);
     $stmt_get_loan->execute();
     $result_loan = $stmt_get_loan->get_result();
@@ -38,10 +38,11 @@ try {
     $loan = $result_loan->fetch_assoc();
     $stmt_get_loan->close();
 
+    $aluno_id = $loan['estudante_id'];
+    $livro_id = $loan['livro_id'];
+
     // 2. If the book was marked as lost, increment the technical reserve
     if ($loan['dado_como_perdido'] == 1) {
-        $livro_id = $loan['livro_id'];
-
         // Ensure the reserve entry exists before incrementing
         $stmt_ensure_reserve = $conn->prepare(
             "INSERT INTO reserva_tecnica (livro_id, conservacao, ano_letivo, quantidade) VALUES (?, ?, ?, 0)
@@ -86,7 +87,9 @@ try {
         'message' => 'Devolução registrada com sucesso!',
         'devolucao' => [
             'emprestimo_id' => $emprestimo_id,
-            'conservacao_devolucao' => $conservacao_devolucao
+            'conservacao_devolucao' => $conservacao_devolucao,
+            'aluno_id' => $aluno_id,
+            'livro_id' => $livro_id
         ]
     ]);
 
