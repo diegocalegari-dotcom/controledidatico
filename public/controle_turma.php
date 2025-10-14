@@ -921,15 +921,20 @@ function get_conservacao_class($conservacao) {
 
                     if (cell) {
                         if (data.replacement_loan) {
-                            // Rebuild the 'ENTREGUE' badge for the new loan
+                            // Rebuild the 'ENTREGUE' badge for the new loan, including the 'lost' icon
                             const loan = data.replacement_loan;
                             const alunoNome = alunoRow.querySelector('td:nth-child(2)').textContent;
-                            const livroTitulo = document.getElementById('modal-devolucao-livro-titulo').textContent; // Get title from the still-open modal
+                            const livroTitulo = document.getElementById('modal-devolucao-livro-titulo').textContent;
 
                             const newBadge = document.createElement('a');
                             newBadge.href = '#';
                             newBadge.className = `badge ${getConservacaoClass(loan.conservacao_entrega)} text-decoration-none btn-devolver`;
-                            newBadge.innerHTML = `<i class="bi bi-check-circle-fill"></i> ENTREGUE (${loan.conservacao_entrega})`;
+                            
+                            newBadge.innerHTML = `
+                                <i class="bi bi-exclamation-triangle-fill text-warning me-1" title="Este livro foi perdido e reposto"></i>
+                                <i class="bi bi-check-circle-fill"></i> ENTREGUE (${loan.conservacao_entrega})
+                            `;
+                            
                             newBadge.dataset.bsToggle = 'modal';
                             newBadge.dataset.bsTarget = '#devolucaoModal';
                             newBadge.dataset.emprestimoId = loan.emprestimo_id;
@@ -938,12 +943,14 @@ function get_conservacao_class($conservacao) {
                             newBadge.dataset.alunoNome = alunoNome;
                             newBadge.dataset.livroTitulo = livroTitulo;
                             newBadge.dataset.conservacaoEntrega = loan.conservacao_entrega;
+                            
                             cell.innerHTML = '';
                             cell.appendChild(newBadge);
 
                         } else if (data.lost_loan) {
-                            // Just show a 'Perdido' badge
-                            cell.innerHTML = '<span class="badge bg-danger">PERDIDO</span>';
+                            // Show a 'Perdido' badge that is clickable to revert
+                            const loan = data.lost_loan;
+                            cell.innerHTML = `<a href="#" class="badge bg-danger text-decoration-none btn-reverter-perda" title="Reverter Status de Perda" data-emprestimo-id="${loan.emprestimo_id}"><i class="bi bi-arrow-counterclockwise"></i> PERDIDO</a>`;
                         }
                     }
 
