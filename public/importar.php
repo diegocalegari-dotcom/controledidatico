@@ -102,7 +102,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 try {
                     $current_curso_id = null;
                     $current_serie_id = null;
-                    $ano_letivo = date('Y');
+                    $ano_letivo_q = $conn->query("SELECT valor FROM configuracoes WHERE chave = 'ano_letivo_ativo' LIMIT 1");
+                    $ano_letivo = $ano_letivo_q->fetch_assoc()['valor'] ?? date('Y');
                     $stats = ['alunos_add' => 0, 'alunos_update' => 0];
                     $should_import_section = false;
 
@@ -149,29 +150,34 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                         if ($should_import_section) {
                             $cgm = $data[3] ?? '';
-                            if (is_numeric($cgm) && strlen($cgm) > 5) {
-                                $nome_aluno = trim($data[4] ?? '');
-                                $situacao = trim($data[12] ?? 'Matriculado');
+                                if (is_numeric($cgm) && strlen($cgm) > 5) {
+                                    $nome_aluno = trim($data[4] ?? '');
+                                    $situacao = trim($data[12] ?? 'Matriculado');
 
-                                $stmt = $conn->prepare("SELECT id FROM estudantes WHERE cgm = ?");
-                                $stmt->bind_param("s", $cgm);
-                                $stmt->execute();
-                                $result = $stmt->get_result();
+                                    // Lógica de Duplicação Controlada
+                                    $new_cgm_for_year = $ano_letivo . '-' . $cgm;
 
-                                if ($result->num_rows > 0) {
-                                    $row = $result->fetch_assoc();
-                                    $estudante_id = $row['id'];
-                                    $stmt_update = $conn->prepare("UPDATE estudantes SET nome = ?, situacao = ?, turma_id = ? WHERE id = ?");
-                                    $stmt_update->bind_param("ssii", $nome_aluno, $situacao, $current_turma_id, $estudante_id);
-                                    $stmt_update->execute();
-                                    $stats['alunos_update']++;
-                                } else {
-                                    $stmt_insert = $conn->prepare("INSERT INTO estudantes (cgm, nome, situacao, turma_id) VALUES (?, ?, ?, ?)");
-                                    $stmt_insert->bind_param("sssi", $cgm, $nome_aluno, $situacao, $current_turma_id);
-                                    $stmt_insert->execute();
-                                    $stats['alunos_add']++;
+                                    $stmt_check_new = $conn->prepare("SELECT id FROM estudantes WHERE cgm = ?");
+                                    $stmt_check_new->bind_param("s", $new_cgm_for_year);
+                                    $stmt_check_new->execute();
+                                    $result_new = $stmt_check_new->get_result();
+
+                                    if ($result_new->num_rows > 0) {
+                                        // O aluno já foi importado para este ano, apenas atualiza
+                                        $row = $result_new->fetch_assoc();
+                                        $estudante_id = $row['id'];
+                                        $stmt_update = $conn->prepare("UPDATE estudantes SET nome = ?, situacao = ?, turma_id = ? WHERE id = ?");
+                                        $stmt_update->bind_param("ssii", $nome_aluno, $situacao, $current_turma_id, $estudante_id);
+                                        $stmt_update->execute();
+                                        $stats['alunos_update']++;
+                                    } else {
+                                        // Cria um novo registro para o aluno no novo ano letivo
+                                        $stmt_insert = $conn->prepare("INSERT INTO estudantes (cgm, nome, situacao, turma_id) VALUES (?, ?, ?, ?)");
+                                        $stmt_insert->bind_param("sssi", $new_cgm_for_year, $nome_aluno, $situacao, $current_turma_id);
+                                        $stmt_insert->execute();
+                                        $stats['alunos_add']++;
+                                    }
                                 }
-                            }
                         }
                     }
                     fclose($handle);

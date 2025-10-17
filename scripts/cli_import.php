@@ -62,7 +62,8 @@ if ($handle !== FALSE) {
     try {
         $current_turma_id = null;
         $is_curso_ativo = true;
-        $ano_letivo = date('Y');
+        $ano_letivo_q = $conn->query("SELECT valor FROM configuracoes WHERE chave = 'ano_letivo_ativo' LIMIT 1");
+        $ano_letivo = $ano_letivo_q->fetch_assoc()['valor'] ?? date('Y');
         $stats = ['alunos_add' => 0, 'alunos_update' => 0, 'alunos_skipped' => 0];
 
         echo "Iniciando importação de {$csv_path}...\n";

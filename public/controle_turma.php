@@ -160,7 +160,7 @@ function get_conservacao_class($conservacao) {
                                     <i class="bi bi-gear"></i>
                                 </button>
                             </td>
-                            <td class="text-start ps-2"><?php echo htmlspecialchars($aluno['nome']); ?></td>
+                            <td class="text-start ps-2"><a href="aluno.php?id=<?php echo $aluno['id']; ?>"><?php echo htmlspecialchars($aluno['nome']); ?></a></td>
                             <td>
                                 <?php if ($sessao_ativa == 'ENTREGA'): ?>
                                     <button class="btn btn-sm btn-success btn-entregar-todos" data-aluno-id="<?php echo $aluno['id']; ?>" title="Entregar todos os livros pendentes para este aluno com qualidade BOM">
@@ -313,7 +313,7 @@ function get_conservacao_class($conservacao) {
 
     <!-- Modal de Gerenciamento de Aluno -->
     <div class="modal fade" id="gerenciarAlunoModal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-xl">
             <div class="modal-content">
                 <div class="modal-header"><h5 class="modal-title">Gerenciar Aluno</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                 <div class="modal-body">
@@ -1005,15 +1005,25 @@ function get_conservacao_class($conservacao) {
             fetch(`api/get_historico_aluno.php?aluno_id=${alunoId}`)
                 .then(handleResponse)
                 .then(data => {
-                    let html = '<ul class="list-group list-group-flush">';
-                    if (data.historico && data.historico.length > 0) {
-                        data.historico.forEach(item => {
-                            html += `<li class="list-group-item"><strong>${item.livro_titulo}</strong> (${item.ano_letivo}) - Status: ${item.status}</li>`;
-                        });
+                    let html = '<table class="table table-sm table-striped table-bordered"><thead><tr><th>Ano</th><th>Livro</th><th>Status</th><th>Conservação</th><th>Data</th></tr></thead><tbody>';
+                    if (data.historico && Object.keys(data.historico).length > 0) {
+                        for (const ano in data.historico) {
+                            data.historico[ano].forEach(item => {
+                                const conservacao = item.status === 'Devolvido' ? item.conservacao_devolucao : item.conservacao_entrega;
+                                const data_evento = item.status === 'Devolvido' ? item.data_devolucao : item.data_entrega;
+                                html += `<tr>
+                                    <td>${item.ano_letivo}</td>
+                                    <td>${item.livro_titulo}</td>
+                                    <td><span class="badge ${getConservacaoClass(conservacao)}">${item.status}</span></td>
+                                    <td>${conservacao || 'N/A'}</td>
+                                    <td>${data_evento ? new Date(data_evento).toLocaleDateString('pt-BR') : 'N/A'}</td>
+                                </tr>`;
+                            });
+                        }
                     } else {
-                        html += '<li class="list-group-item">Nenhum registro encontrado.</li>';
+                        html += '<tr><td colspan="5" class="text-center">Nenhum registro encontrado.</td></tr>';
                     }
-                    html += '</ul>';
+                    html += '</tbody></table>';
                     historicoContent.innerHTML = html;
                 })
                 .catch(err => {
