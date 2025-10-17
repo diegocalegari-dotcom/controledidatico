@@ -1,0 +1,18 @@
+
+# Logs
+error.log
+
+# Backups
+controledidatico_backup.sql
+controledidatico_forced_backup.sql
+openbiblio_forced_backup.sql
+
+# Configuration
+my.ini
+
+# CSV and TXT files
+*.csv
+*.txt
+
+# Temporary files
+temp_query.sql

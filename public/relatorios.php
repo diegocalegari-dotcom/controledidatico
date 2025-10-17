@@ -31,6 +31,7 @@ $conn->close();
     <title>Relatórios - Controle Didático</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         .table-sm th, .table-sm td {
             padding: 0.4rem;
@@ -72,6 +73,11 @@ $conn->close();
                     <i class="bi bi-file-earmark-text-fill"></i> Relatórios Anuais
                 </button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="graficos-tab" data-bs-toggle="tab" data-bs-target="#graficos" type="button" role="tab" aria-controls="graficos" aria-selected="false">
+                    <i class="bi bi-pie-chart-fill"></i> Gráficos de Conservação
+                </button>
+            </li>
         </ul>
 
         <div class="tab-content pt-3" id="relatoriosTabContent">
@@ -95,6 +101,17 @@ $conn->close();
                 </div>
                 <div id="inventario-content">
                     <!-- O conteúdo do inventário será carregado aqui via JS -->
+                </div>
+            </div>
+
+            <!-- Aba de Gráficos -->
+            <div class="tab-pane fade" id="graficos" role="tabpanel" aria-labelledby="graficos-tab">
+                <div class="my-3">
+                    <h3>Relatório de Conservação de Livros</h3>
+                    <p>Quantitativos e porcentagens do estado de conservação dos livros na reserva técnica para o ano letivo ativo.</p>
+                </div>
+                <div id="graficos-content">
+                    <!-- O conteúdo dos gráficos será carregado aqui via JS -->
                 </div>
             </div>
 
@@ -382,6 +399,157 @@ $conn->close();
             }
             if(inventarioAnoLetivoEl) {
                 inventarioAnoLetivoEl.addEventListener('change', carregarInventario);
+            }
+
+            // --- Lógica para Gráficos de Conservação ---
+            const graficosTab = document.getElementById('graficos-tab');
+            if (graficosTab) {
+                graficosTab.addEventListener('shown.bs.tab', carregarRelatorioConservacao);
+            }
+
+            async function carregarRelatorioConservacao() {
+                const contentDiv = document.getElementById('graficos-content');
+                contentDiv.innerHTML = '<div class="text-center p-4"><div class="spinner-border" role="status"><span class="visually-hidden">Carregando...</span></div></div>';
+
+                try {
+                    const response = await fetch('api/gerar_relatorio_conservacao.php');
+                    if (!response.ok) {
+                        throw new Error('Falha ao buscar dados para o relatório de conservação.');
+                    }
+                    const data = await response.json();
+
+                    if (Object.keys(data).length === 0) {
+                        contentDiv.innerHTML = '<div class="alert alert-light text-center">Nenhum dado de reserva técnica encontrado para o ano letivo ativo.</div>';
+                        return;
+                    }
+
+                    renderGraficos(data);
+
+                } catch (error) {
+                    contentDiv.innerHTML = '<div class="alert alert-danger">Erro ao carregar o relatório.</div>';
+                    console.error('Erro ao carregar relatório de conservação:', error);
+                }
+            }
+
+            function renderGraficos(data) {
+                const contentDiv = document.getElementById('graficos-content');
+                const reportTypes = {
+                    'reserva_tecnica': 'Reserva Técnica',
+                    'em_circulacao': 'Em Circulação (Estado na Entrega)',
+                    'devolvidos': 'Devolvidos no Ano (Estado na Devolução)'
+                };
+                const conservationOrder = ['ÓTIMO', 'BOM', 'REGULAR', 'RUIM', 'PÉSSIMO'];
+                const colorMap = {
+                    'ÓTIMO': '#198754',
+                    'BOM': '#198754',
+                    'REGULAR': '#ffc107',
+                    'RUIM': '#fd7e14',
+                    'PÉSSIMO': '#dc3545'
+                };
+
+                let finalHtml = '';
+
+                for (const type in reportTypes) {
+                    const title = reportTypes[type];
+                    const reportData = data[type];
+
+                    finalHtml += `<h2 class="mt-5 mb-3">${title}</h2>`;
+
+                    if (Object.keys(reportData).length === 0) {
+                        finalHtml += '<div class="alert alert-light">Nenhum dado encontrado para esta categoria.</div>';
+                        continue;
+                    }
+
+                    let html = '<div class="row row-cols-1 row-cols-lg-2 g-4">';
+                    for (const serie in reportData) {
+                        const chartId = `chart-${type}-${serie.replace(/\s+/g, '-')}`;
+                        html += `
+                            <div class="col">
+                                <div class="card h-100">
+                                    <div class="card-header"><h5>${serie}</h5></div>
+                                    <div class="card-body">
+                                        <div class="row align-items-center">
+                                            <div class="col-md-6">
+                                                <canvas id="${chartId}"></canvas>
+                                            </div>
+                                            <div class="col-md-6">
+                                                ${renderTabelaConservacao(reportData[serie], conservationOrder)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    html += '</div>';
+                    finalHtml += html;
+                }
+
+                contentDiv.innerHTML = finalHtml;
+
+                // Render charts after HTML is in the DOM
+                for (const type in reportTypes) {
+                    const reportData = data[type];
+                    for (const serie in reportData) {
+                        const chartId = `chart-${type}-${serie.replace(/\s+/g, '-')}`;
+                        const ctx = document.getElementById(chartId).getContext('2d');
+                        
+                        const labels = conservationOrder.filter(status => reportData[serie][status] > 0);
+                        const chartData = labels.map(status => reportData[serie][status]);
+                        const backgroundColors = labels.map(status => colorMap[status]);
+
+                        new Chart(ctx, {
+                            type: 'pie',
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    data: chartData,
+                                    backgroundColor: backgroundColors,
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                plugins: {
+                                    legend: {
+                                        position: 'top',
+                                    },
+                                    title: {
+                                        display: false,
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+
+            function renderTabelaConservacao(data, order) {
+                let total = order.reduce((sum, status) => sum + (data[status] || 0), 0);
+                if (total === 0) return '<p>Nenhum livro na reserva para esta série.</p>';
+
+                let tableHtml = '<table class="table table-sm table-borderless table-hover"><tbody>';
+                order.forEach(status => {
+                    const count = data[status] || 0;
+                    if (count > 0) {
+                        const percentage = ((count / total) * 100).toFixed(1);
+                        tableHtml += `
+                            <tr>
+                                <td>${status}</td>
+                                <td class="text-end">${count}</td>
+                                <td class="text-end">(${percentage}%)</td>
+                            </tr>
+                        `;
+                    }
+                });
+                tableHtml += `
+                    <tr class="fw-bold border-top">
+                        <td>TOTAL</td>
+                        <td class="text-end">${total}</td>
+                        <td class="text-end">(100%)</td>
+                    </tr>
+                `;
+                tableHtml += '</tbody></table>';
+                return tableHtml;
             }
         });
     </script>
